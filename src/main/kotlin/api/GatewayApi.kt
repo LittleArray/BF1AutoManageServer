@@ -1,6 +1,7 @@
 package api
 
 import com.google.gson.Gson
+import data.FullServerInfoJson
 import data.JsonRpcObj
 import data.PLBy22
 import data.PostResponse
@@ -11,7 +12,11 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import java.net.InetSocketAddress
+import java.net.Proxy
+import java.net.SocketAddress
 import java.util.concurrent.TimeUnit
+
 
 /**
  * @Description
@@ -20,8 +25,9 @@ import java.util.concurrent.TimeUnit
  */
 
 
-object ApiBuilder {
+object GatewayApi {
     val okHttpClient = OkHttpClient()
+    var sa: SocketAddress = InetSocketAddress("127.0.0.1", 7890)
     private val loger: Logger = LoggerFactory.getLogger(this.javaClass)
     fun jsonRpc(body: String, sessionId: String = ""): PostResponse {
         return try {
@@ -34,17 +40,17 @@ object ApiBuilder {
                     }
                 }
                 .build()
-            val response = okHttpClient.newCall(request).execute()
+            val response = okHttpClient.newBuilder().proxy(Proxy(Proxy.Type.HTTP, sa)).build().newCall(request).execute()
             return if (response.isSuccessful) {
                 val res = response.body.string()
                 PostResponse(isSuccessful = true, reqBody = res)
             } else {
                 val res = response.body.string()
-                loger.error("jsonRpc请求不成功,{}",res)
+                loger.error("jsonRpc请求不成功,{}",res.replace("\n","").substring(0,20))
                 PostResponse(isSuccessful = false, reqBody = res)
             }
         } catch (ex: Exception) {
-            loger.error("jsonRpc请求出错,{}",ex.stackTraceToString())
+            loger.error("jsonRpc请求出错,{}",ex.stackTraceToString().replace("\n","").substring(0,20))
             PostResponse(isSuccessful = false, error = ex.stackTraceToString())
         }
     }
@@ -93,7 +99,7 @@ object ApiBuilder {
                 }
             )
         )
-        return ApiBuilder.jsonRpc(body, sessionId)
+        return GatewayApi.jsonRpc(body, sessionId)
     }
 
     //removeBan
@@ -176,37 +182,26 @@ object ApiBuilder {
         )
         return jsonRpc(body, sessionId)
     }
-    //22玩家列表数据接口
-    fun getPlayerListBy22(gameId: Long): PLBy22 {
-        try {
-            val url = "https://blaze.2788.pro/GameManager.getGameDataFromId"
-            val json = "{\"DNAM String\": \"csFullGameList\", \"GLST List<Integer>\": [$gameId]}"
-            val request = Request.Builder()
-                .url(url)
-                .post(json.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
-                .addHeader("Accept", "application/json")
-                .build()
-            val response = okHttpClient
-                .newBuilder()
-                .connectTimeout(15, TimeUnit.SECONDS)//设置连接超时时间
-                .readTimeout(15, TimeUnit.SECONDS)//设置读取超时时间
-                .build()
-                .newCall(request).execute()
-            return if (response.isSuccessful) {
-                val res = response.body.string()
-                val plBy22 = Gson().fromJson(res, PLBy22::class.java)
-                plBy22.copy(isSuccessful = true)
-            } else {
-                val res = response.body.string()
-                loger.error("玩家列表请求不成功,{}",res)
-                PLBy22(isSuccessful = false)
-            }
-        } catch (ex: Exception) {
-            loger.error("玩家列表请求出错,{}",ex.stackTraceToString())
-            return PLBy22(isSuccessful = false)
+
+    //获取服务器完整信息
+    fun getFullServerDetails(sessionId: String, gameId: String): FullServerInfoJson {
+        val method = "GameServer.getFullServerDetails"
+        val body = Gson().toJson(
+            JsonRpcObj(
+                method = method,
+                params = object {
+                    val game = "tunguska"
+                    val gameId = gameId
+                }
+            )
+        )
+        val postResponse = jsonRpc(body, sessionId)
+        return if (postResponse.isSuccessful) {
+            Gson().fromJson(postResponse.reqBody, FullServerInfoJson::class.java).copy(isSuccessful = true)
+        } else {
+            FullServerInfoJson(isSuccessful = false)
         }
     }
-
 }
 
 

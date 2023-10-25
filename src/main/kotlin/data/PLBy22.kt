@@ -132,7 +132,8 @@ data class PLBy22(
         val ROLE: String,
         val STAT: Long,
         val STYP: Long,
-        val TIDX: Long
+        val TIDX: Long,
+        var TEAMNAME:String
     )
     data class TINF(
         val RMAP: RMAP,

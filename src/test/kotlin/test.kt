@@ -1,5 +1,4 @@
-import kotlin.coroutines.CoroutineContext
-import kotlin.coroutines.coroutineContext
+import api.GatewayApi
 import kotlin.reflect.KProperty0
 
 /**
@@ -8,7 +7,8 @@ import kotlin.reflect.KProperty0
  * @Date 2023/10/21
  */
 fun main(){
-    b().main()
+   // println(GatewayApi.removeServerBan("3cc8e89b-04e8-40da-b15b-052059df698c", 11934453, "1006716545570"))
+    println(Math.random() * 1000)
 }
 class b(){
     var a = 1243434

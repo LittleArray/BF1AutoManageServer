@@ -1,4 +1,5 @@
-import api.Server
+package instance
+
 import utils.DataUtils
 
 /**

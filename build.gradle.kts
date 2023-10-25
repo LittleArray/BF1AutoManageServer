@@ -13,7 +13,8 @@ repositories {
 
 dependencies {
     testImplementation(kotlin("test"))
-    implementation("ch.qos.logback:logback-classic:1.2.3")
+    implementation("ch.qos.logback:logback-classic:1.4.7")
+    implementation("ch.qos.logback:logback-core:1.4.7")
     implementation("org.jsoup:jsoup:1.16.1")
     implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.11")
     implementation("com.google.code.gson:gson:2.10.1")

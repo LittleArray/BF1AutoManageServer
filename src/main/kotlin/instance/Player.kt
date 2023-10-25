@@ -1,12 +1,12 @@
-package api
+package instance
 
+import api.GatewayApi
 import com.google.gson.Gson
 import data.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import java.text.SimpleDateFormat
 import kotlin.reflect.KMutableProperty0
 
 /**
@@ -16,45 +16,151 @@ import kotlin.reflect.KMutableProperty0
  */
 class Player(
     val sessionId: String,
-    val pid: Long,
     p: PLBy22.ROST,
     var serverSetting: KMutableProperty0<Server.ServerSetting>,
+    map:String,
 ) {
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     private val loger: Logger = LoggerFactory.getLogger(this.javaClass)
+    val pid: Long = p.PID
     var _p: PLBy22.ROST = p
         set(value) {
             val old = field
-            if (old.JGTS != value.JGTS){//加入时间变更了
-                loger.info("玩家{}进服时间变更",value.NAME)
+            if (old.JGTS != value.JGTS) {//加入时间变更了
+                loger.info("玩家{}进服时间变更", value.NAME)
+                init()
             }
-            if (old.ROLE != value.ROLE){//身份变更
-                loger.info("玩家{}身份变更 {}",value.NAME,value.ROLE)
+            if (old.ROLE != value.ROLE) {//身份变更
+                loger.info("玩家{}身份变更 {}", value.NAME, value.ROLE)
             }
-            if (old.TIDX != value.TIDX){//队伍变更
-                loger.info("玩家{}队伍变更 {}",value.NAME,value.TIDX)
+            if (old.TIDX != value.TIDX) {//队伍变更
+                loger.info("玩家{}队伍变更 {}", value.NAME, value.TEAMNAME)
             }
             field = value
         }
+    var mapPretty:String = map
+        set(value) {
+            val old = field
+            if (old != value){
+                //地图更新
+            }
+            field = value
+        }
+    var teamName:String = ""
+    var isExit = false
+    var nextEnterTime = 0L
+    var oldWpData : MutableMap<String,Int> = mutableMapOf()
+    var oldVpData : MutableMap<String,Int> = mutableMapOf()
 
     init {
-        kickAlwaysByStats()
+        init()
     }
 
-    fun kickAlwaysByStats(){
-        coroutineScope.launch {
-            val stats = getStats()
-            if (stats != null) {
-                if (stats.result.basicStats.kpm > serverSetting.get().lifeMaxKPM) kick(serverSetting.get().gameId,"Life KPM Limited")
-                if (stats.result.kdr > serverSetting.get().lifeMaxKD) kick(serverSetting.get().gameId,"Life KD Limited")
+    fun init() {
+        loger.info("新玩家{}进入服务器{}", _p.NAME, serverSetting.get().gameId)
+        isExit = false
+        if (nextEnterTime > 0){
+            if (System.currentTimeMillis() < nextEnterTime){
+                kick("You can re-enter after ${SimpleDateFormat("HH:mm").format(nextEnterTime)}")
             }else{
-                kickAlwaysByStats()
+                nextEnterTime = 0
             }
         }
+        if (serverSetting.get().whitelist.any { wl-> wl == _p.NAME }) return
+        if (serverSetting.get().botlist.any { wl-> wl == _p.NAME }) return
+        coroutineScope.launch {
+            kickAlwaysByStats()
+            kickAlwaysByClassRank()
+            randomWpCheck()
+        }
     }
-    fun update(p: PLBy22.ROST) {
+
+    suspend fun randomWpCheck(isAlwaysCheck:Boolean = false,times:Int = 0){
+        if (isExit) return
+        //loger.info("随机查询{}武器",_p.NAME)
+        val weapons = getWeapons()
+        weapons?.result?.forEach {wp->
+            wp.weapons.forEach {
+                val wps = it.stats.values
+                val name = it.name
+                val kickName = if (name.length>12) name.subSequence(0,12) else name
+                val kills = wps?.kills?:0
+                val shots = wps?.shots?:kills
+                if (serverSetting.get().weaponLimited.any { wpl -> wpl == name }){
+                    //loger.info("{}受限武器{}记录,当前击杀{},开火次数{}",_p.NAME, name,wps?.kills,wps?.shots)
+                    if(oldWpData[name] != null && shots > oldWpData[name]!!){
+                        kick("Ban $kickName",15)
+                    }
+                    oldWpData[name] = shots
+                }
+                if ((wps?.kills?.div(100)?:0) > serverSetting.get().weaponStarLimited){
+                    //loger.info("{}的{}大于{}星,当前击杀{},开火次数{}",_p.NAME, name,serverSetting.get().weaponStarLimited,wps?.kills,wps?.shots)
+                    if (wps?.kills != null){
+                        if(oldWpData[name] != null && shots > oldWpData[name]!!){
+                            kick("$kickName Over ${serverSetting.get().weaponStarLimited} Stars",15)
+                        }
+                        oldWpData[name] = shots
+                    }
+                }
+            }
+        }
+        if(weapons != null) return
+        if (isAlwaysCheck && times<5) {
+            delay(60 * 1000)
+            randomWpCheck(true,times+1)
+        }
+    }
+
+    private suspend fun kickAlwaysByStats() {
+        if (isExit) return
+        val stats = getStats()
+        if (stats != null) {
+            //loger.info("玩家{}生涯数据:KD:{}", _p.NAME, stats.result.kdr)
+            val winPercent = stats.result.basicStats.wins.toDouble() / (stats.result.basicStats.wins + stats.result.basicStats.losses)
+            if (stats.result.basicStats.kpm > serverSetting.get().lifeMaxKPM)
+                kick("LifeKPM Limited ${serverSetting.get().lifeMaxKD}")
+            if (stats.result.kdr > serverSetting.get().lifeMaxKD)
+                kick("LifeKD Limited ${serverSetting.get().lifeMaxKD}")
+            if (winPercent > serverSetting.get().winPercentLimited)
+                kick("WinPercent Limited ${serverSetting.get().winPercentLimited * 100}%")
+        } else {
+            loger.error("请求玩家{}生涯失败,5s后重新查询", _p.NAME)
+            delay(5000)
+            kickAlwaysByStats()
+        }
+    }
+
+    private suspend fun kickAlwaysByClassRank() {
+        if (isExit) return
+        val classRank = getClassRank()
+        if (classRank != null) {
+            if (classRank.result.assault.rank > (serverSetting.get().classRankLimited["assault"] ?: 51))
+                kick("AssaultRank Limited ${serverSetting.get().classRankLimited["assault"]}")
+            if (classRank.result.cavalry.rank > (serverSetting.get().classRankLimited["cavalry"] ?: 51))
+                kick("CavalryRank Limited ${serverSetting.get().classRankLimited["cavalry"]}")
+            if (classRank.result.medic.rank > (serverSetting.get().classRankLimited["medic"] ?: 51))
+                kick("MedicRank Limited ${serverSetting.get().classRankLimited["medic"]}")
+            if (classRank.result.pilot.rank > (serverSetting.get().classRankLimited["pilot"] ?: 51))
+                kick("PilotRank Limited ${serverSetting.get().classRankLimited["pilot"]}")
+            if (classRank.result.tanker.rank > (serverSetting.get().classRankLimited["tanker"] ?: 51))
+                kick("TankerRank Limited ${serverSetting.get().classRankLimited["tanker"]}")
+        } else {
+            loger.error("请求玩家{}兵种等级失败,5s后重新查询", _p.NAME)
+            delay(5000)
+            kickAlwaysByClassRank()
+        }
+
+    }
+
+    fun update(p: PLBy22.ROST,map:String) {
         _p = p
+        mapPretty = map
         //serverSetting = setting
+    }
+
+    fun exit() {
+        loger.info("玩家{}离开服务器{}", _p.NAME, serverSetting.get().gameId)
+        isExit = true
     }
 
     /**
@@ -72,7 +178,7 @@ class Player(
                 }
             )
         )
-        val builder = ApiBuilder.jsonRpc(body, sessionId)
+        val builder = GatewayApi.jsonRpc(body, sessionId)
         return try {
             Gson().fromJson(builder.reqBody, GatewayClassRank::class.java)
         } catch (e: Exception) {
@@ -97,7 +203,7 @@ class Player(
                 }
             )
         )
-        val builder = ApiBuilder.jsonRpc(body, sessionId)
+        val builder = GatewayApi.jsonRpc(body, sessionId)
         if (builder.isSuccessful) {
             return try {
                 Gson().fromJson(builder.reqBody, GatewayStats::class.java)
@@ -174,7 +280,7 @@ class Player(
                 }
             )
         )
-        val builder = ApiBuilder.jsonRpc(body, sessionId)
+        val builder = GatewayApi.jsonRpc(body, sessionId)
         return try {
             Gson().fromJson(builder.reqBody, GatewayWeapons::class.java)
         } catch (e: Exception) {
@@ -197,7 +303,7 @@ class Player(
                 }
             )
         )
-        val builder = ApiBuilder.jsonRpc(body, sessionId)
+        val builder = GatewayApi.jsonRpc(body, sessionId)
         return try {
             Gson().fromJson(builder.reqBody, GatewayPlatoons::class.java)
         } catch (e: Exception) {
@@ -220,7 +326,7 @@ class Player(
                 }
             )
         )
-        val builder = ApiBuilder.jsonRpc(body, sessionId)
+        val builder = GatewayApi.jsonRpc(body, sessionId)
         return try {
             Gson().fromJson(builder.reqBody, GatewayActivePlatoon::class.java)
         } catch (e: Exception) {
@@ -245,7 +351,7 @@ class Player(
                 }
             )
         )
-        val builder = ApiBuilder.jsonRpc(body, sessionId)
+        val builder = GatewayApi.jsonRpc(body, sessionId)
         return try {
             Gson().fromJson(builder.reqBody, GatewayRecentServers::class.java)
         } catch (e: Exception) {
@@ -269,7 +375,7 @@ class Player(
                 }
             )
         )
-        val builder = ApiBuilder.jsonRpc(body, sessionId)
+        val builder = GatewayApi.jsonRpc(body, sessionId)
 
         return try {
             Gson().fromJson(builder.reqBody, GatewayVehicles::class.java)
@@ -279,12 +385,13 @@ class Player(
         }
     }
 
-    fun kick(gameID: Long, reason: String = "kick without reason") {
-        val kickPlayer = ApiBuilder.kickPlayer(sessionId, gameID.toString(), pid.toString(), reason)
+    fun kick(reason: String = "kick without reason",kickCD:Int = 0) {
+        val kickPlayer = GatewayApi.kickPlayer(sessionId, serverSetting.get().gameId.toString(), pid.toString(), reason)
         if (kickPlayer.reqBody.contains("Error", true)) {
-            loger.error("在服务器{}踢出{}玩家失败 {}", gameID, pid, kickPlayer.reqBody)
+            loger.error("在服务器{}踢出玩家{}失败 {}", serverSetting.get().gameId.toString(), _p.NAME, kickPlayer.reqBody)
         } else {
-            loger.info("在服务器{}踢出{}玩家成功,理由:{}", gameID, pid, reason)
+            loger.info("在服务器{}踢出玩家{}成功,理由:{}", serverSetting.get().gameId.toString(), _p.NAME, reason)
+            if (kickCD>0) nextEnterTime = System.currentTimeMillis() + (kickCD * 60 * 1000)
         }
     }
 }

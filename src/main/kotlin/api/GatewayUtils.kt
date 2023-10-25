@@ -73,7 +73,7 @@ object GatewayUtils {
                 addHeader("X-HostingGameId", "tunguska")
             }
             .build()
-        val response = ApiBuilder.okHttpClient.newCall(request).execute()
+        val response = GatewayApi.okHttpClient.newCall(request).execute()
         val res = if (response.isSuccessful) {
             response.body.string()
         } else {
