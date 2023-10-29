@@ -449,10 +449,9 @@ class Player(
         val kickPlayer = GatewayApi.kickPlayer(sessionId, serverSetting.get().gameId.toString(), pid.toString(), reason)
         if (kickPlayer.reqBody.contains("Error", true)) {
             loger.error(
-                "在服务器{}踢出玩家{}失败 {}",
+                "在服务器{}踢出玩家{}失败",
                 serverSetting.get().gameId.toString(),
-                _p.NAME,
-                kickPlayer.reqBody
+                _p.NAME
             )
             coroutineScope.launch {
                 delay(60*1000)
