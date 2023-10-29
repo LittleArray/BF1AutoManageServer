@@ -1,9 +1,12 @@
 package instance
 
 import api.BFEACApi
+import api.GatewayApi
 import api.GatewayUtils
 import api.PlayerListApi
 import com.google.gson.Gson
+import data.PostResponse
+import data.Result
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -93,11 +96,6 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
             val old = field
             if (old != value) {
                 loger.info("服务器{}地图变更:{}", serverSetting.gameId, value)
-                playerList.forEach {
-                    CoroutineScope(Dispatchers.IO).launch {
-                        it.randomWpCheck(true)
-                    }
-                }
             }
             field = value
         }
@@ -111,8 +109,13 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         var lifeMaxKPM: Double = 5.0,
         var recMaxKPM: Double = 5.0,
         var recMaxKD: Double = 5.0,
+        var kickCD: Int = 0,
+        var killsLimited: Int = 999,
+        var matchKDLimited: Double = 5.0,
         var winPercentLimited: Double = 1.1,
+        var rankLimited: Int = 151,
         var reEnterKick: Boolean = false,
+        var spectatorKick: Boolean = false,
         var classRankLimited: MutableMap<String, Int> = mutableMapOf(),
         var weaponLimited: MutableList<String> = mutableListOf(),
         var weaponStarLimited: Int = 9999,
@@ -183,6 +186,24 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
                     }
                 }
             }
+            //离开玩家
+            playerList.removeIf {
+                if (list.GDAT[0].ROST.none { e -> e.PID == it.pid }) {
+                    if(it.nextEnterTime > 0){
+                        if (System.currentTimeMillis() > it.nextEnterTime){
+                            it.exit()
+                            true
+                        }else{
+                            false
+                        }
+                    }else{
+                        it.exit()
+                        true
+                    }
+                } else {
+                    false
+                }
+            }
             //机器人
             if (serverSetting.botlist.any { it == p.NAME }) bots++
             //真实玩家
@@ -202,34 +223,20 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
                     it.update(p,mapPretty)
                 }
             }
-            //离开玩家
-            playerList.removeIf {
-                if (list.GDAT[0].ROST.none { e -> e.PID == it.pid }) {
-                    it.exit()
-                    if(it.nextEnterTime > 0){
-                        if (System.currentTimeMillis() > it.nextEnterTime){
-                            true
-                        }else{
-                            cdPlayer++
-                            false
-                        }
-                    }else{
-                        true
-                    }
-                } else {
-                    false
-                }
-            }
+        }
+        playerList.forEach {
+            if (it.nextEnterTime > 0) cdPlayer++
         }
         loger.info(
-            "服务器{}玩家数量更新 玩家:{} 观战:{} 加载:{} 机器人:{} 踢出CD玩家:{} 总数:{}",
+            "服务器{}玩家数量更新 玩家:{} 观战:{} 加载:{} 机器人:{} 踢出CD玩家:{} 总数:{} 进度:{}",
             serverSetting.gameId,
             soldier,
             spectator,
             queue,
             bots,
             cdPlayer,
-            playerList.size
+            playerList.size,
+            list.GDAT?.firstOrNull()?.ATTR?.progress
         )
         if (multiCheck.pids.isEmpty()) return
         val multiCheckResponse = BFEACApi.multiCheck(multiCheck)
@@ -237,6 +244,17 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
             playerList.forEach {
                 if (it.pid == c) it.kick("Ban By BFEAC.COM")
             }
+        }
+    }
+    fun getRSPInfo(): Result? {
+        return GatewayApi.getFullServerDetails(serverSetting.sessionID, serverSetting.gameId.toString()).result
+    }
+    fun chooseMap(index:Int): String? {
+        val result = getRSPInfo()
+        return if (GatewayApi.chooseServerMap(serverSetting.sessionID, result?.rspInfo?.server?.persistedGameId ?: "", index.toString()).isSuccessful) {
+            result?.serverInfo?.rotation?.get(index)?.mapPrettyName
+        }else{
+            null
         }
     }
 }
