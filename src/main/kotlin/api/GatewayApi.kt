@@ -3,10 +3,8 @@ package api
 import com.google.gson.Gson
 import data.FullServerInfoJson
 import data.JsonRpcObj
-import data.PLBy22
 import data.PostResponse
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -40,20 +38,26 @@ object GatewayApi {
                     }
                 }
                 .build()
-            val response = okHttpClient.newBuilder().proxy(Proxy(Proxy.Type.HTTP, sa)).build().newCall(request).execute()
+            val response = okHttpClient
+                .newBuilder()
+                .proxy(Proxy(Proxy.Type.HTTP, sa))
+                .connectTimeout(30, TimeUnit.SECONDS)//设置连接超时时间
+                .readTimeout(30, TimeUnit.SECONDS)//设置读取超时时间
+                .build().newCall(request).execute()
             return if (response.isSuccessful) {
                 val res = response.body.string()
                 PostResponse(isSuccessful = true, reqBody = res)
             } else {
                 val res = response.body.string()
-                loger.error("jsonRpc请求不成功,{}",res.replace("\n","").substring(0,20))
+                loger.error("jsonRpc请求不成功,{}", res.replace("\n", ""))
                 PostResponse(isSuccessful = false, reqBody = res)
             }
         } catch (ex: Exception) {
-            loger.error("jsonRpc请求出错,{}",ex.stackTraceToString().replace("\n","").substring(0,20))
+            loger.error("jsonRpc请求出错,{}", ex.stackTraceToString().replace("\n", "").substring(0, 20))
             PostResponse(isSuccessful = false, error = ex.stackTraceToString())
         }
     }
+
     //踢人
     fun kickPlayer(sessionId: String, gameId: String, personaId: String, reason: String): PostResponse {
         val method = "RSP.kickPlayer"
@@ -87,7 +91,7 @@ object GatewayApi {
         return jsonRpc(body, sessionId)
     }
 
-    fun searchServer(name:String,sessionId: String): PostResponse {
+    fun searchServer(name: String, sessionId: String): PostResponse {
         val method = "GameServer.searchServers"
         val body = Gson().toJson(
             JsonRpcObj(
@@ -151,7 +155,7 @@ object GatewayApi {
     }
 
     //切图
-    fun chooseServerVIP(sessionId: String, persistedGameId: String, levelIndex: String): PostResponse {
+    fun chooseServerMap(sessionId: String, persistedGameId: String, levelIndex: String): PostResponse {
         val method = "RSP.chooseLevel"
         val body = Gson().toJson(
             JsonRpcObj(
