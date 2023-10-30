@@ -246,7 +246,7 @@ class Player(
         if (serverSetting.get().botlist.any { wl -> wl == _p.NAME }) return
         if (nextEnterTime > 0) {
             if (System.currentTimeMillis() < nextEnterTime) {
-                kick("You Can Re-enter After ${SimpleDateFormat("HH:mm").format(nextEnterTime)}")
+                kick("Wait ${SimpleDateFormat("mm").format(System.currentTimeMillis() - nextEnterTime)}mins To Re-enter")
             } else {
                 nextEnterTime = 0
             }
@@ -376,6 +376,8 @@ class Player(
                             kick("KD Limited ${serverSetting.get().matchKDLimited}",15)
                         }
                     }
+                    oldKills = nowKills
+                    oldDeath = nowDeath
                 }
             }else{
                 delay(60 * 1000)
@@ -445,7 +447,7 @@ class Player(
         isExit = true
     }
 
-    fun kick(reason: String = "kick without reason", kickCD: Int = serverSetting.get().kickCD) {
+    fun kick(reason: String = "kick without reason", kickCD: Int = serverSetting.get().kickCD,times:Int = 0) {
         val kickPlayer = GatewayApi.kickPlayer(sessionId, serverSetting.get().gameId.toString(), pid.toString(), reason)
         if (kickPlayer.reqBody.contains("Error", true)) {
             loger.error(
@@ -453,9 +455,10 @@ class Player(
                 serverSetting.get().gameId.toString(),
                 _p.NAME
             )
+            if (times > 3) return
             coroutineScope.launch {
                 delay(60*1000)
-                kick(reason, kickCD)
+                kick(reason, kickCD,times + 1)
             }
         } else {
             loger.info("在服务器{}踢出玩家{}成功,理由:{}", serverSetting.get().gameId.toString(), _p.NAME, reason)
