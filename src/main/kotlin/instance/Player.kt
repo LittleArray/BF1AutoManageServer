@@ -242,12 +242,10 @@ class Player(
     fun init() {
         loger.info("新玩家{}进入服务器{}", _p.NAME, serverSetting.get().gameId)
         isExit = false
-        if (serverSetting.get().whitelist.any { wl -> wl == _p.NAME }) return
         if (serverSetting.get().botlist.any { wl -> wl == _p.NAME }) return
-        if (serverSetting.get().adminlist.any { wl -> wl == _p.PID.toString() }) return
         if (nextEnterTime > 0) {
             if (System.currentTimeMillis() < nextEnterTime) {
-                kick("Wait ${SimpleDateFormat("mm").format(System.currentTimeMillis() - nextEnterTime)}mins To Re-enter")
+                kick("Wait ${SimpleDateFormat("mm").format(nextEnterTime - System.currentTimeMillis())}mins To Re-enter")
             } else {
                 nextEnterTime = 0
             }
@@ -368,7 +366,7 @@ class Player(
                 val death = nowDeath - oldDeath
                 val kd = kills.toDouble() / death.toDouble()
                 if (kills > 0 && oldKills != 0 && oldDeath != 0)  {
-                    loger.info("服务器{}对局结算 玩家{} 击杀{} 死亡{} KD{}",serverSetting.get().gameId,_p.NAME, kills, death,kd)
+                    loger.info("服务器{}对局结算 玩家:{} 击杀:{} 死亡:{} 击杀死亡比:{}",serverSetting.get().gameId,_p.NAME, kills, death,kd)
                     if (kills > serverSetting.get().matchKillsEnable){
                         if (kills > serverSetting.get().killsLimited){
                             kick("Kills Limited ${serverSetting.get().killsLimited}",15)
@@ -449,6 +447,8 @@ class Player(
     }
 
     fun kick(reason: String = "kick without reason", kickCD: Int = serverSetting.get().kickCD,times:Int = 0) {
+        if (serverSetting.get().whitelist.any { wl -> wl == _p.NAME }) return
+        if (serverSetting.get().adminlist.any { wl -> wl == _p.PID.toString() }) return
         val kickPlayer = GatewayApi.kickPlayer(sessionId, serverSetting.get().gameId.toString(), pid.toString(), reason)
         if (kickPlayer.reqBody.contains("Error", true)) {
             loger.error(

@@ -175,6 +175,9 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
                 (list.GDAT?.firstOrNull()?.ATTR?.admins3?:"") +
                 (list.GDAT?.firstOrNull()?.ATTR?.admins4?:"")
         serverSetting.adminlist = admin.split(";").toMutableList()
+        val oldSoldier = soldier
+        val oldQueue = queue
+        val oldSpectator = spectator
         soldier = 0
         queue = 0
         spectator = 0
@@ -234,17 +237,19 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         playerList.forEach {
             if (it.nextEnterTime > 0) cdPlayer++
         }
-        loger.info(
-            "服务器{}玩家数量更新 玩家:{} 观战:{} 加载:{} 机器人:{} 踢出CD玩家:{} 总数:{} 进度:{}",
-            serverSetting.gameId,
-            soldier,
-            spectator,
-            queue,
-            bots,
-            cdPlayer,
-            playerList.size,
-            list.GDAT?.firstOrNull()?.ATTR?.progress
-        )
+        if (oldSoldier != soldier || oldQueue != queue || oldSpectator != spectator){
+            loger.info(
+                "服务器{}玩家数量更新 玩家:{} 观战:{} 加载:{} 机器人:{} 踢出CD玩家:{} 总数:{} 进度:{}",
+                serverSetting.gameId,
+                soldier,
+                spectator,
+                queue,
+                bots,
+                cdPlayer,
+                playerList.size,
+                list.GDAT?.firstOrNull()?.ATTR?.progress
+            )
+        }
         if (multiCheck.pids.isEmpty()) return
         val multiCheckResponse = BFEACApi.multiCheck(multiCheck)
         multiCheckResponse.data.forEach { c ->
