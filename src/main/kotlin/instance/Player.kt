@@ -244,6 +244,7 @@ class Player(
         isExit = false
         if (serverSetting.get().whitelist.any { wl -> wl == _p.NAME }) return
         if (serverSetting.get().botlist.any { wl -> wl == _p.NAME }) return
+        if (serverSetting.get().adminlist.any { wl -> wl == _p.PID.toString() }) return
         if (nextEnterTime > 0) {
             if (System.currentTimeMillis() < nextEnterTime) {
                 kick("Wait ${SimpleDateFormat("mm").format(System.currentTimeMillis() - nextEnterTime)}mins To Re-enter")

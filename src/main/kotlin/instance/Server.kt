@@ -125,7 +125,8 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         var platoonLimited: MutableList<String> = mutableListOf(),
         var whitelist: MutableList<String> = mutableListOf(),
         var botlist: MutableList<String> = mutableListOf(),
-        var vbanlist: MutableList<String> = mutableListOf()
+        var vbanlist: MutableList<String> = mutableListOf(),
+        var adminlist: MutableList<String> = mutableListOf()
     ) {
         override fun toString(): String {
             return "$gameId $lifeMaxKD $lifeMaxKPM $winPercentLimited $classRankLimited"
@@ -169,6 +170,11 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
             playerList = mutableListOf()
             loger.warn("服务器{}内玩家已清空", serverSetting.gameId)
         }
+        val admin = (list.GDAT?.firstOrNull()?.ATTR?.admins1?:"") +
+                (list.GDAT?.firstOrNull()?.ATTR?.admins2?:"") +
+                (list.GDAT?.firstOrNull()?.ATTR?.admins3?:"") +
+                (list.GDAT?.firstOrNull()?.ATTR?.admins4?:"")
+        serverSetting.adminlist = admin.split(";").toMutableList()
         soldier = 0
         queue = 0
         spectator = 0
