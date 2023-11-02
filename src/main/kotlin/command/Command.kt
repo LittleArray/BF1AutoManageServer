@@ -7,6 +7,7 @@ import instance.Server
 import com.google.gson.Gson
 import data.GatewayServerSearch
 import data.KitCache
+import instance.Player
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import kotlin.system.exitProcess
@@ -92,7 +93,7 @@ object Command {
                 ServerInstance.INSTANCE.forEach {
                    if (it.serverSetting.gameId == gameID){
                        it.playerList.forEach {
-                           it.kick("server shutdown 关服了")
+                           it.kick(split.getOrNull(2)?:"server shutdown 关服了")
                        }
                    }
                 }
@@ -209,16 +210,25 @@ object Command {
             "kit" ->{
                 loger.info("{}",KitCache.cache)
             }
-            "kick" ->{
+            "k" ->{
+                val list = mutableListOf<Player>()
                 ServerInstance.INSTANCE.forEach {
                     it.playerList.forEach {
-                        if ((split.getOrNull(1)?:"").contains(it._p.NAME,true)){
-                            it.kick(split.getOrNull(2)?:"違反規則")
+                        if ((split.getOrNull(1)?:"").indexOf(it._p.NAME,0,true) != -1){
+                            list.add(it)
                         }
                     }
                 }
+                if (list.size == 1){
+                    list.first().kick(split.getOrNull(2)?:"Rule Violation")
+                }else{
+                    loger.info("多个或没有找到对应玩家")
+                    list.forEach {
+                        loger.info("{}",it._p.NAME)
+                    }
+                }
             }
-            "ban" ->{
+            "b" ->{
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
                 } catch (e: Exception) {

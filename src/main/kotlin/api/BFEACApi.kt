@@ -47,7 +47,7 @@ object BFEACApi {
                 PostResponse(isSuccessful = false, reqBody = res)
             }
         } catch (ex: Exception) {
-            loger.error("BFEAC请求不成功,{}",ex.stackTraceToString().replace("\n","").substring(0,20))
+            loger.error("BFEAC请求不成功,{}",ex.stackTraceToString().replace("\n","").substring(0,50))
             PostResponse(isSuccessful = false, error = ex.stackTraceToString())
         }
     }

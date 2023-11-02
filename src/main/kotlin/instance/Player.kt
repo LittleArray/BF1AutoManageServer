@@ -201,7 +201,7 @@ class Player(
             }
             if (old.ROLE != value.ROLE) {//身份变更
                 loger.info("玩家{}身份变更 {}", value.NAME, value.ROLE)
-                if (serverSetting.get().spectatorKick && value.ROLE == ""){
+                if (serverSetting.get().spectatorKick && value.ROLE == "") {
                     kick("NO WATCHING")
                 }
             }
@@ -233,7 +233,7 @@ class Player(
     var isChangeMap = false
     var nextEnterTime = 0L
     var oldKills = 0
-    var oldDeath= 0
+    var oldDeath = 0
 
     init {
         init()
@@ -250,13 +250,15 @@ class Player(
                 nextEnterTime = 0
             }
         }
-        if (serverSetting.get().spectatorKick && _p.ROLE == ""){
+        if (serverSetting.get().spectatorKick && _p.ROLE == "") {
             kick("NO WATCHING")
         }
         coroutineScope.launch {
             kickAlwaysByStats()
             delay((Math.random() * 1000).toLong())
             kickAlwaysByClassRank()
+            delay((Math.random() * 1000).toLong())
+            kickByPlatoons()
             delay((Math.random() * 1000).toLong())
             randomWpCheck()
             delay((Math.random() * 1000).toLong())
@@ -320,10 +322,10 @@ class Player(
                 val vpn = it.stats.values
                 val name = it.name
                 val kickName = if (name.length > 12) name.subSequence(0, 12) else name
-                val kills:Int= (vpn?.kills?:0).toInt()
+                val kills: Int = (vpn?.kills ?: 0).toInt()
                 if (serverSetting.get().vehicleLimited.any { wpl -> wpl == name }) {
                     //loger.info("{}受限武器{}记录,当前击杀{},开火次数{}",_p.NAME, name,wps?.kills,wps?.shots)
-                    if (kills > (KitCache.cache[name]?.get(pid)?:(kills+1))) {
+                    if (kills > (KitCache.cache[name]?.get(pid) ?: (kills + 1))) {
                         kick("Ban $kickName", 15)
                     }
                 }
@@ -355,30 +357,37 @@ class Player(
         }
     }
 
-    private suspend fun updateMatch(){
+    private suspend fun updateMatch() {
         if (isExit) return
         val stats = getStats()
         if (stats != null) {
             var nowKills = stats.result.basicStats.kills
             var nowDeath = stats.result.basicStats.deaths
-            if (nowKills > oldKills){
+            if (nowKills > oldKills) {
                 val kills = nowKills - oldKills
                 val death = nowDeath - oldDeath
                 val kd = kills.toDouble() / death.toDouble()
-                if (kills > 0 && oldKills != 0 && oldDeath != 0)  {
-                    loger.info("服务器{}对局结算 玩家:{} 击杀:{} 死亡:{} 击杀死亡比:{}",serverSetting.get().gameId,_p.NAME, kills, death,kd)
-                    if (kills > serverSetting.get().matchKillsEnable){
-                        if (kills > serverSetting.get().killsLimited){
-                            kick("Kills Limited ${serverSetting.get().killsLimited}",15)
+                if (kills > 0 && oldKills != 0 && oldDeath != 0) {
+                    loger.info(
+                        "服务器{}对局结算 玩家:{} 击杀:{} 死亡:{} 击杀死亡比:{}",
+                        serverSetting.get().gameId,
+                        _p.NAME,
+                        kills,
+                        death,
+                        kd
+                    )
+                    if (kills > serverSetting.get().matchKillsEnable) {
+                        if (kills > serverSetting.get().killsLimited) {
+                            kick("Kills Limited ${serverSetting.get().killsLimited}", 15)
                         }
-                        if (kd > serverSetting.get().matchKDLimited){
-                            kick("KD Limited ${serverSetting.get().matchKDLimited}",15)
+                        if (kd > serverSetting.get().matchKDLimited) {
+                            kick("KD Limited ${serverSetting.get().matchKDLimited}", 15)
                         }
                     }
                     oldKills = nowKills
                     oldDeath = nowDeath
                 }
-            }else{
+            } else {
                 delay(60 * 1000)
                 updateMatch()
             }
@@ -389,8 +398,6 @@ class Player(
         if (isExit) return
         val stats = getStats()
         if (stats != null) {
-            oldKills = stats.result.basicStats.kills
-            oldDeath = stats.result.basicStats.deaths
             //loger.info("玩家{}生涯数据:KD:{}", _p.NAME, stats.result.kdr)
             val winPercent =
                 stats.result.basicStats.wins.toDouble() / (stats.result.basicStats.wins + stats.result.basicStats.losses)
@@ -412,6 +419,7 @@ class Player(
 
     private suspend fun kickAlwaysByClassRank() {
         if (isExit) return
+        if (serverSetting.get().classRankLimited.isEmpty()) return
         val classRank = getClassRank()
         if (classRank != null) {
             if (classRank.result.assault.rank > (serverSetting.get().classRankLimited["assault"] ?: 51))
@@ -432,6 +440,16 @@ class Player(
 
     }
 
+    private suspend fun kickByPlatoons(){
+        if (isExit) return
+        if (serverSetting.get().platoonLimited.isEmpty()) return
+        val platoons = getPlatoons()
+        if (platoons != null){
+            platoons.result.any { pp -> serverSetting.get().platoonLimited.any { it == pp.name } }
+                kick("Platoon Limited")
+        }
+    }
+
     fun update(p: PLBy22.ROST, map: String) {
         mapPretty = map
         _p = p
@@ -446,20 +464,21 @@ class Player(
         isExit = true
     }
 
-    fun kick(reason: String = "kick without reason", kickCD: Int = serverSetting.get().kickCD,times:Int = 0) {
+    fun kick(reason: String = "kick without reason", kickCD: Int = serverSetting.get().kickCD, times: Int = 0) {
         if (serverSetting.get().whitelist.any { wl -> wl == _p.NAME }) return
         if (serverSetting.get().adminlist.any { wl -> wl == _p.PID.toString() }) return
         val kickPlayer = GatewayApi.kickPlayer(sessionId, serverSetting.get().gameId.toString(), pid.toString(), reason)
         if (kickPlayer.reqBody.contains("Error", true)) {
             loger.error(
-                "在服务器{}踢出玩家{}失败",
+                "在服务器{}踢出玩家{}失败,理由:{}",
                 serverSetting.get().gameId.toString(),
-                _p.NAME
+                _p.NAME,
+                reason
             )
             if (times > 3) return
             coroutineScope.launch {
-                delay(60*1000)
-                kick(reason, kickCD,times + 1)
+                delay(60 * 1000)
+                kick(reason, kickCD, times + 1)
             }
         } else {
             loger.info("在服务器{}踢出玩家{}成功,理由:{}", serverSetting.get().gameId.toString(), _p.NAME, reason)

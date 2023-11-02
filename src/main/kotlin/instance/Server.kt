@@ -117,7 +117,13 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         var rankLimited: Int = 151,
         var reEnterKick: Boolean = false,
         var spectatorKick: Boolean = false,
-        var classRankLimited: MutableMap<String, Int> = mutableMapOf(),
+        var classRankLimited: MutableMap<String, Int> = mutableMapOf(
+            Pair("assault",51),
+            Pair("cavalry",51),
+            Pair("medic",51),
+            Pair("pilot",51),
+            Pair("tanker",51),
+        ),
         var weaponLimited: MutableList<String> = mutableListOf(),
         var weaponStarLimited: Int = 9999,
         var vehicleLimited: MutableList<String> = mutableListOf(),
@@ -166,10 +172,6 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         val list = PlayerListApi.getPlayerListBy22(serverSetting.gameId)
         if (!list.isSuccessful) return
         mapName = list.GDAT?.firstOrNull()?.ATTR?.level ?: ""
-        if (list.GDAT?.firstOrNull()?.ROST == null || list.GDAT.firstOrNull()?.ROST?.isEmpty() == true) {
-            playerList = mutableListOf()
-            loger.warn("服务器{}内玩家已清空", serverSetting.gameId)
-        }
         val admin = (list.GDAT?.firstOrNull()?.ATTR?.admins1?:"") +
                 (list.GDAT?.firstOrNull()?.ATTR?.admins2?:"") +
                 (list.GDAT?.firstOrNull()?.ATTR?.admins3?:"") +
@@ -238,6 +240,10 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
             if (it.nextEnterTime > 0) cdPlayer++
         }
         if (oldSoldier != soldier || oldQueue != queue || oldSpectator != spectator){
+            if (list.GDAT?.firstOrNull()?.ROST == null || list.GDAT.firstOrNull()?.ROST?.isEmpty() == true) {
+                playerList = mutableListOf()
+                loger.warn("服务器{}内玩家已清空", serverSetting.gameId)
+            }
             loger.info(
                 "服务器{}玩家数量更新 玩家:{} 观战:{} 加载:{} 机器人:{} 踢出CD玩家:{} 总数:{} 进度:{}",
                 serverSetting.gameId,

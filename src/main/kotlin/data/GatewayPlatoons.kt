@@ -9,7 +9,7 @@ data class GatewayPlatoons(
         val creatorId: String,
         val dateCreated: Long,
         val description: String,
-        val emblem: String,
+        val emblem: String?=null,
         val guid: String,
         val joinConfig: JoinConfig,
         val name: String,
