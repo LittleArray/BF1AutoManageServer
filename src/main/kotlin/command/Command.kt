@@ -214,7 +214,7 @@ object Command {
                 val list = mutableListOf<Player>()
                 ServerInstance.INSTANCE.forEach {
                     it.playerList.forEach {
-                        if ((split.getOrNull(1)?:"").indexOf(it._p.NAME,0,true) != -1){
+                        if (it._p.NAME.indexOf((split.getOrNull(1)?:""),0,true) != -1){
                             list.add(it)
                         }
                     }
