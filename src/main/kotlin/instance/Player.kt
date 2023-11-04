@@ -275,7 +275,7 @@ class Player(
             wp.weapons.forEach {
                 val wps = it.stats.values
                 val name = it.name
-                val kickName = if (name.length > 12) name.subSequence(0, 12) else name
+                val kickName = if (name.length > 10) name.subSequence(0, 10) else name
                 val kills = wps?.kills ?: 0
                 val shots = wps?.shots ?: kills
                 if (serverSetting.get().weaponLimited.any { wpl -> wpl == name }) {
@@ -321,7 +321,7 @@ class Player(
             wp.vehicles.forEach {
                 val vpn = it.stats.values
                 val name = it.name
-                val kickName = if (name.length > 12) name.subSequence(0, 12) else name
+                val kickName = if (name.length > 10) name.subSequence(0,10) else name
                 val kills: Int = (vpn?.kills ?: 0).toInt()
                 if (serverSetting.get().vehicleLimited.any { wpl -> wpl == name }) {
                     //loger.info("{}受限武器{}记录,当前击杀{},开火次数{}",_p.NAME, name,wps?.kills,wps?.shots)
@@ -399,17 +399,32 @@ class Player(
         val stats = getStats()
         if (stats != null) {
             //loger.info("玩家{}生涯数据:KD:{}", _p.NAME, stats.result.kdr)
-            val winPercent =
-                stats.result.basicStats.wins.toDouble() / (stats.result.basicStats.wins + stats.result.basicStats.losses)
+            oldKills = stats.result.basicStats.kills
+            oldDeath = stats.result.basicStats.deaths
+            val kpm = stats.result.basicStats.kpm
+            val kd = stats.result.kdr
+            val winPercent = stats.result.basicStats.wins.toDouble() / (stats.result.basicStats.wins + stats.result.basicStats.losses)
             val rank = ExperienceConversion.toRank(stats.result.basicStats.spm, stats.result.basicStats.timePlayed)
-            if (stats.result.basicStats.kpm > serverSetting.get().lifeMaxKPM)
+            if (kpm > serverSetting.get().lifeMaxKPM)
                 kick("LifeKPM Limited ${serverSetting.get().lifeMaxKD}")
-            if (stats.result.kdr > serverSetting.get().lifeMaxKD)
+            if (kd > serverSetting.get().lifeMaxKD)
                 kick("LifeKD Limited ${serverSetting.get().lifeMaxKD}")
             if (winPercent > serverSetting.get().winPercentLimited && rank > 25)
                 kick("WinPercent Limited ${serverSetting.get().winPercentLimited * 100}%")
             if (rank > serverSetting.get().rankLimited)
                 kick("Rank Limited ${serverSetting.get().rankLimited}")
+            if (rank > 95){
+                if (kd > serverSetting.get().lifeMaxKD95)
+                    kick("Rank>95 KD Limited ${serverSetting.get().lifeMaxKD95}")
+                if (kpm > serverSetting.get().lifeMaxKPM95)
+                    kick("Rank>95 KPM Limited ${serverSetting.get().lifeMaxKPM95}")
+            }
+            if (rank >= 150){
+                if (kd > serverSetting.get().lifeMaxKD150)
+                    kick("Rank150 KD Limited ${serverSetting.get().lifeMaxKD150}")
+                if (kpm > serverSetting.get().lifeMaxKPM150)
+                    kick("Rank150 KPM Limited ${serverSetting.get().lifeMaxKPM150}")
+            }
         } else {
             loger.error("请求玩家{}生涯失败,5s后重新查询", _p.NAME)
             delay(5000)
