@@ -39,7 +39,7 @@ object GHSBotsApi {
             val path: String,
             val state: String,
             val time: Long,
-            val user: String
+            val user: String?=null
         )
         data class ServerWithBot(
             val botList: List<Bot>,

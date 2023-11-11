@@ -1,18 +1,20 @@
 package instance
 
-import api.BFEACApi
-import api.GatewayApi
-import api.GatewayUtils
-import api.PlayerListApi
+import api.*
+import com.charleskorn.kaml.Yaml
 import com.google.gson.Gson
 import data.PostResponse
 import data.Result
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import utils.DataUtils
+import java.util.UUID
 
 /**
  * @Description
@@ -96,11 +98,16 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
             val old = field
             if (old != value) {
                 loger.info("服务器{}地图变更:{}", serverSetting.gameId, value)
+                playerList.forEach {
+                    it.isChangeMap = true
+                }
             }
             field = value
         }
+    @Serializable
     class ServerSetting(
         var rspId: Long = 0,
+        var token: String = UUID.randomUUID().toString(),
         var gameId: Long = 0,
         var sessionID: String = "",
         var sid: String = "",
@@ -113,10 +120,9 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         var lifeMaxKD150: Double = 5.0,
         var recMaxKPM: Double = 5.0,
         var recMaxKD: Double = 5.0,
-        var kickCD: Int = 0,
-        var killsLimited: Int = 999,
+        var recPlayTime: Double = 31.0,
         var matchKillsEnable: Int = 999,
-        var matchKDLimited: Double = 5.0,
+        var kickCD: Int = 0,
         var winPercentLimited: Double = 1.1,
         var rankLimited: Int = 151,
         var reEnterKick: Boolean = false,
@@ -128,10 +134,6 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
             Pair("pilot",51),
             Pair("tanker",51),
         ),
-        var weaponLimited: MutableList<String> = mutableListOf(),
-        var weaponStarLimited: Int = 9999,
-        var vehicleLimited: MutableList<String> = mutableListOf(),
-        var vehicleStarLimited: Int = 9999,
         var platoonLimited: MutableList<String> = mutableListOf(),
         var whitelist: MutableList<String> = mutableListOf(),
         var botlist: MutableList<String> = mutableListOf(),
@@ -147,7 +149,7 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         try {
             DataUtils.save(
                 "ServerSetting_${serverSetting.gameId}",
-                Gson().toJson(serverSetting, ServerSetting::class.java)
+                Yaml.default.encodeToString(ServerSetting.serializer(),serverSetting)
             )
             loger.info("服务器{}数据保存成功", serverSetting.gameId)
         } catch (e: Exception) {
@@ -157,8 +159,7 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
 
     fun loadServer() {
         try {
-            serverSetting =
-                Gson().fromJson(DataUtils.load("ServerSetting_${serverSetting.gameId}"), ServerSetting::class.java)
+            serverSetting = Yaml.default.decodeFromString(ServerSetting.serializer(),DataUtils.load("ServerSetting_${serverSetting.gameId}"))
             loger.info("服务器{}数据载入成功", serverSetting.gameId)
             loger.info("服务器配置:{}", serverSetting.toString())
         } catch (e: Exception) {
@@ -230,13 +231,13 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
             if (p.ROLE == "") spectator++
             //新玩家
             if (playerList.none { it.pid == p.PID }) {
-                val newPlayer = Player(serverSetting.sessionID, p, this::serverSetting,mapPretty)
+                val newPlayer = Player(serverSetting.sessionID, p, this::serverSetting)
                 playerList.add(newPlayer)
             }
             //老玩家
             playerList.forEach {
                 if (it.pid == p.PID) {
-                    it.update(p,mapPretty)
+                    it.update(p)
                 }
             }
         }
@@ -269,7 +270,9 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         }
     }
     fun getRSPInfo(): Result? {
-        return GatewayApi.getFullServerDetails(serverSetting.sessionID, serverSetting.gameId.toString()).result
+        val rspInfo = GatewayApi.getFullServerDetails(serverSetting.sessionID, serverSetting.gameId.toString()).result
+        serverSetting.rspId = rspInfo?.rspInfo?.server?.serverId?.toLong()?:0L
+        return rspInfo
     }
     fun chooseMap(index:Int): String? {
         val result = getRSPInfo()

@@ -4,6 +4,10 @@ import com.google.gson.Gson
 import data.FullServerInfoJson
 import data.JsonRpcObj
 import data.PostResponse
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -13,6 +17,7 @@ import org.slf4j.LoggerFactory
 import java.net.InetSocketAddress
 import java.net.Proxy
 import java.net.SocketAddress
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 
@@ -26,36 +31,44 @@ import java.util.concurrent.TimeUnit
 object GatewayApi {
     val okHttpClient = OkHttpClient()
     var sa: SocketAddress = InetSocketAddress("127.0.0.1", 7890)
+    val taskQueue = Channel<suspend () -> PostResponse>(2)
     private val loger: Logger = LoggerFactory.getLogger(this.javaClass)
-    fun jsonRpc(body: String, sessionId: String = ""): PostResponse {
-        return try {
-            val request = Request.Builder()
-                .url("https://sparta-gw.battlelog.com/jsonrpc/pc/api")
-                .post(body.toRequestBody("application/json".toMediaType()))
-                .apply {
-                    if (sessionId.isNotBlank()) {
-                        addHeader("X-GatewaySession", sessionId)
+    fun jsonRpc(body: String, sessionId: String = ""): PostResponse = runBlocking {
+        launch {
+            taskQueue.send {
+                runBlocking {
+                    try {
+                        val request = Request.Builder()
+                            .url("https://sparta-gw.battlelog.com/jsonrpc/pc/api")
+                            .post(body.toRequestBody("application/json".toMediaType()))
+                            .apply {
+                                if (sessionId.isNotBlank()) {
+                                    addHeader("X-GatewaySession", sessionId)
+                                }
+                            }
+                            .build()
+                        val response = okHttpClient
+                            .newBuilder()
+                            .proxy(Proxy(Proxy.Type.HTTP, sa))
+                            .connectTimeout(30, TimeUnit.SECONDS)//设置连接超时时间
+                            .readTimeout(30, TimeUnit.SECONDS)//设置读取超时时间
+                            .build().newCall(request).execute()
+                        if (response.isSuccessful) {
+                            val res = response.body.string()
+                            PostResponse(isSuccessful = true, reqBody = res)
+                        } else {
+                            val res = response.body.string()
+                            loger.error("jsonRpc请求不成功,{}", res.replace("\n", ""))
+                            PostResponse(isSuccessful = false, reqBody = res)
+                        }
+                    } catch (ex: Exception) {
+                        loger.error("jsonRpc请求出错,{}", ex.stackTraceToString().replace("\n", "").substring(0, 20))
+                        PostResponse(isSuccessful = false, error = ex.stackTraceToString())
                     }
                 }
-                .build()
-            val response = okHttpClient
-                .newBuilder()
-                .proxy(Proxy(Proxy.Type.HTTP, sa))
-                .connectTimeout(30, TimeUnit.SECONDS)//设置连接超时时间
-                .readTimeout(30, TimeUnit.SECONDS)//设置读取超时时间
-                .build().newCall(request).execute()
-            return if (response.isSuccessful) {
-                val res = response.body.string()
-                PostResponse(isSuccessful = true, reqBody = res)
-            } else {
-                val res = response.body.string()
-                loger.error("jsonRpc请求不成功,{}", res.replace("\n", ""))
-                PostResponse(isSuccessful = false, reqBody = res)
             }
-        } catch (ex: Exception) {
-            loger.error("jsonRpc请求出错,{}", ex.stackTraceToString().replace("\n", "").substring(0, 20))
-            PostResponse(isSuccessful = false, error = ex.stackTraceToString())
         }
+        taskQueue.receive().invoke()
     }
 
     //踢人

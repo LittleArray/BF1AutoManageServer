@@ -1,3 +1,4 @@
+import api.QQBotApi
 import command.Command.cmd
 import instance.ServerInstance
 import org.slf4j.LoggerFactory
@@ -21,6 +22,7 @@ fun main() {
             Thread.sleep(15 * 1000)
         }
     }
+    QQBotApi.init(2086)
     serversThread.name = "ServersThread"
     serversThread.start()
     val scanner = Scanner(System.`in`)

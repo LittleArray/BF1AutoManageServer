@@ -1,6 +1,7 @@
 plugins {
     kotlin("jvm") version "1.8.21"
     kotlin("kapt") version "1.8.21"
+    kotlin("plugin.serialization") version "1.8.21"
     application
 }
 
@@ -12,14 +13,17 @@ repositories {
 }
 
 dependencies {
+    implementation("io.javalin:javalin:5.6.1")
     testImplementation(kotlin("test"))
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.21")
     implementation("ch.qos.logback:logback-classic:1.4.7")
     implementation("ch.qos.logback:logback-core:1.4.7")
+    implementation("com.charleskorn.kaml:kaml:0.55.0")
     implementation("org.jsoup:jsoup:1.16.1")
     implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.11")
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.4.2")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.15.0")
 }
 
 tasks.test {
@@ -48,7 +52,8 @@ tasks.jar {
         "META-INF/versions/9/module-info.class",
         "META-INF/LICENSE","module-info.class",
         "META-INF/*.txt",
-        "META-INF/services/org.eclipse.jetty.webapp.Configuration"
+        "META-INF/services/org.eclipse.jetty.webapp.Configuration",
+        "META-INF/services/jakarta.servlet.ServletContainerInitializer"
     )
 }
 kotlin {

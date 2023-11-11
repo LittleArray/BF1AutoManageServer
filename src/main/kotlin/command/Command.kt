@@ -1,12 +1,12 @@
 package command
 
+import api.BtrApi
 import api.GHSBotsApi
 import instance.ServerInstance
 import api.GatewayApi
 import instance.Server
 import com.google.gson.Gson
 import data.GatewayServerSearch
-import data.KitCache
 import instance.Player
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -25,10 +25,10 @@ object Command {
             cmd(value)
         }
 
-    fun cmd(cmd:String){
+    fun cmd(cmd: String) {
         val split = cmd.split(" ")
-        when(split[0]){
-            "add" ->{
+        when (split[0]) {
+            "add" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
                 } catch (e: Exception) {
@@ -40,13 +40,14 @@ object Command {
                     loger.error("缺少参数")
                     return
                 }
-                if (ServerInstance.addServer(Server.ServerSetting(sessionID=sessionID, gameId = gameID))) {
+                if (ServerInstance.addServer(Server.ServerSetting(sessionID = sessionID, gameId = gameID))) {
                     loger.info("添加成功")
-                }else{
+                } else {
                     loger.info("添加失败")
                 }
             }
-            "remove" ->{
+
+            "remove" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
                 } catch (e: Exception) {
@@ -59,27 +60,34 @@ object Command {
                 }
                 if (ServerInstance.removeServer(gameID)) {
                     loger.info("移除成功")
-                }else{
+                } else {
                     loger.info("移除失败")
                 }
             }
-            "list"->{
+
+            "list" -> {
                 ServerInstance.INSTANCE.forEach {
-                    loger.info("服务器{}",it.serverSetting.gameId)
+                    loger.info("服务器{}", it.serverSetting.gameId)
                 }
             }
-            "ss" ->{
-                val reqBody = GatewayApi.searchServer(split.getOrNull(1) ?: "", split.getOrNull(2) ?: ServerInstance.INSTANCE.firstOrNull()?.serverSetting?.sessionID ?:"").reqBody
-                Gson().fromJson(reqBody,GatewayServerSearch::class.java).result.gameservers.forEach {
+
+            "ss" -> {
+                val reqBody = GatewayApi.searchServer(
+                    split.getOrNull(1) ?: "",
+                    split.getOrNull(2) ?: ServerInstance.INSTANCE.firstOrNull()?.serverSetting?.sessionID ?: ""
+                ).reqBody
+                Gson().fromJson(reqBody, GatewayServerSearch::class.java).result.gameservers.forEach {
                     loger.info("服名:${it.name} GameID:${it.gameId} ${it.mapNamePretty} - ${it.mapModePretty}")
                 }
             }
-            "update" ->{
+
+            "update" -> {
                 ServerInstance.INSTANCE.forEach {
                     it.updateSessionID()
                 }
             }
-            "boom" ->{
+
+            "boom" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
                 } catch (e: Exception) {
@@ -91,14 +99,15 @@ object Command {
                     return
                 }
                 ServerInstance.INSTANCE.forEach {
-                   if (it.serverSetting.gameId == gameID){
-                       it.playerList.forEach {
-                           it.kick(split.getOrNull(2)?:"server shutdown 关服了")
-                       }
-                   }
+                    if (it.serverSetting.gameId == gameID) {
+                        it.playerList.forEach {
+                            it.kick(split.getOrNull(2) ?: "server shutdown 关服了")
+                        }
+                    }
                 }
             }
-            "aclassl" ->{
+
+            "aclassl" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
                 } catch (e: Exception) {
@@ -117,12 +126,13 @@ object Command {
                     return
                 }
                 ServerInstance.INSTANCE.forEach {
-                   if (it.serverSetting.gameId == gameID){
-                       it.serverSetting.classRankLimited.put(className,rank)
-                   }
+                    if (it.serverSetting.gameId == gameID) {
+                        it.serverSetting.classRankLimited.put(className, rank)
+                    }
                 }
             }
-            "awl" ->{
+
+            "awl" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
                 } catch (e: Exception) {
@@ -135,12 +145,13 @@ object Command {
                     return
                 }
                 ServerInstance.INSTANCE.forEach {
-                    if (it.serverSetting.gameId == gameID){
+                    if (it.serverSetting.gameId == gameID) {
                         it.serverSetting.whitelist.add(name)
                     }
                 }
             }
-            "aghsbots" ->{
+
+            "aghsbots" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
                 } catch (e: Exception) {
@@ -153,19 +164,21 @@ object Command {
                     return
                 }
                 ServerInstance.INSTANCE.forEach {
-                    if (it.serverSetting.gameId == gameID){
+                    if (it.serverSetting.gameId == gameID) {
                         val bots = GHSBotsApi.getBots(url)
-                        if (bots.isSuccessful){
+                        if (bots.isSuccessful) {
                             val botsJson = Gson().fromJson(bots.reqBody, GHSBotsApi.BotsJson::class.java)
-                            botsJson.data.bots.forEach {b->
-                                it.serverSetting.botlist.add(b.user)
+                            botsJson.data.bots.forEach { b ->
+                                if (b.user != null)
+                                    it.serverSetting.botlist.add(b.user)
                             }
-                            loger.info("机器人数据导入成功{}",gameID)
+                            loger.info("机器人数据导入成功{}", gameID)
                         }
                     }
                 }
             }
-            "qt"->{
+
+            "qt" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
                 } catch (e: Exception) {
@@ -185,12 +198,13 @@ object Command {
                 ServerInstance.INSTANCE.forEach {
                     if (it.serverSetting.gameId == gameID) {
                         val map = it.chooseMap(index)
-                        loger.info("{}切图成功:{}",gameID,map)
+                        loger.info("{}切图成功:{}", gameID, map)
                     }
                 }
 
             }
-            "grsp" ->{
+
+            "grsp" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
                 } catch (e: Exception) {
@@ -200,35 +214,51 @@ object Command {
                 ServerInstance.INSTANCE.forEach {
                     if (it.serverSetting.gameId == gameID) {
                         val result = it.getRSPInfo()
-                        loger.info("{}地图池:",gameID)
-                        result?.serverInfo?.rotation?.forEachIndexed {index,it->
-                            loger.info("{}-{} {}",it.mapPrettyName,it.modePrettyName,index)
+                        loger.info("{}地图池:", gameID)
+                        result?.serverInfo?.rotation?.forEachIndexed { index, it ->
+                            loger.info("{}-{} {}", it.mapPrettyName, it.modePrettyName, index)
                         }
                     }
                 }
             }
-            "kit" ->{
-                loger.info("{}",KitCache.cache)
-            }
-            "k" ->{
+
+            "k" -> {
                 val list = mutableListOf<Player>()
                 ServerInstance.INSTANCE.forEach {
                     it.playerList.forEach {
-                        if (it._p.NAME.indexOf((split.getOrNull(1)?:""),0,true) != -1){
+                        if (it._p.NAME.indexOf((split.getOrNull(1) ?: ""), 0, true) != -1) {
                             list.add(it)
                         }
                     }
                 }
-                if (list.size == 1){
-                    list.first().kick(split.getOrNull(2)?:"Rule Violation")
-                }else{
+                if (list.size == 1) {
+                    list.first().kick(split.getOrNull(2) ?: "Rule Violation")
+                } else {
                     loger.info("多个或没有找到对应玩家")
                     list.forEach {
-                        loger.info("{}",it._p.NAME)
+                        loger.info("{}", it._p.NAME)
                     }
                 }
             }
-            "b" ->{
+
+            "kid" -> {
+                val pid = split.getOrNull(1) ?: ""
+                ServerInstance.INSTANCE.forEach {
+                    val kick = GatewayApi.kickPlayer(
+                        it.serverSetting.sessionID,
+                        it.serverSetting.gameId.toString(),
+                        pid,
+                        split.getOrNull(2) ?: "Rule Violation"
+                    )
+                    if (kick.isSuccessful) loger.info(
+                        "在服务器{}踢出{}成功",
+                        it.serverSetting.gameId,
+                        pid
+                    ) else loger.error("在服务器{}踢出{}失败", it.serverSetting.gameId, pid)
+                }
+            }
+
+            "b" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
                 } catch (e: Exception) {
@@ -253,19 +283,22 @@ object Command {
                             rspInfo?.rspInfo?.server?.serverId?.toInt() ?: 0,
                             name
                         )
-                        if (ban.isSuccessful) loger.info("{}封禁成功",name)
+                        if (ban.isSuccessful) loger.info("{}封禁成功", name)
                     }
                 }
             }
-            "stop" ->{
+
+            "stop" -> {
                 ServerInstance.save()
                 exitProcess(0)
             }
-            "ls" ->{
+
+            "ls" -> {
                 ServerInstance.INSTANCE.forEach {
                     val rspInfo = it.getRSPInfo()
-                    loger.info("服务器{} {}",it.serverSetting.gameId,rspInfo?.serverInfo?.name)
-                    loger.info("地图模式:{}-{} 收藏数:{} {}/{}[{}]({})",
+                    loger.info("服务器{} {}", it.serverSetting.gameId, rspInfo?.serverInfo?.name)
+                    loger.info(
+                        "地图模式:{}-{} 收藏数:{} {}/{}[{}]({})",
                         rspInfo?.serverInfo?.mapNamePretty,
                         rspInfo?.serverInfo?.mapModePretty,
                         rspInfo?.serverInfo?.serverBookmarkCount,
@@ -275,17 +308,29 @@ object Command {
                         rspInfo?.serverInfo?.slots?.Spectator?.current,
                     )
                     it.playerList.forEach {
-                        loger.info("[{}] {} {} {} {}ms",
+                        loger.info(
+                            "[{}] {} LKD:{} LKP:{} RKD:{} RKP:{} 队伍:{} 语言地区:{} {}ms",
                             it._p.PATT?.rank,
                             it._p.NAME,
+                            it.lkd,
+                            it.lkp,
+                            it.rkd,
+                            it.rkp,
                             it._p.TEAMNAME,
-                            it._p.LOC.toString(16).chunked(2).map { it.toInt(16).toByte() }.toByteArray().toString(Charsets.US_ASCII),
+                            it._p.LOC.toString(16).chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+                                .toString(Charsets.US_ASCII),
                             it._p.PATT?.latency
                         )
                     }
                 }
             }
-            else-> loger.info("无效命令")
+            "btro" ->{
+                loger.info("btr队列:{}",BtrApi.taskQueue)
+            }
+            "jso" ->{
+                loger.info("JsonRpc队列:{}",GatewayApi.taskQueue)
+            }
+            else -> loger.info("无效命令")
         }
     }
 }

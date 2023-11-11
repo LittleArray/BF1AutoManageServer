@@ -35,12 +35,15 @@ object GatewayUtils {
      * @return String
      */
     private fun getLoginAuthToken(sid: String, remid: String): String {
+        loger.info("更新AuthToken")
         val request = Request.Builder()
             .url("https://accounts.ea.com/connect/auth;?client_id=sparta-backend-as-user-pc&response_type=code&release_type=none")
             .addHeader("Cookie","sid=$sid; remid=$remid")
             .build()
-        val response = OkHttpClient().newCall(request).execute()
-        return response.request.url.toString().replace("http://127.0.0.1/success?code=","")
+        val response = OkHttpClient().newBuilder().build().newCall(request).execute()
+        val authToken = response.request.url.toString().replace("http://127.0.0.1/success?code=", "")
+        loger.info("AuthToken:{}",authToken)
+        return authToken
     }
 
     /**
@@ -75,9 +78,12 @@ object GatewayUtils {
             .build()
         val response = GatewayApi.okHttpClient.newCall(request).execute()
         val res = if (response.isSuccessful) {
+            loger.info("登入成功")
             response.body.string()
         } else {
-            response.body.string()
+            val err = response.body.string()
+            loger.error("登入请求失败:{}",err.replace("\n","").substring(0,36))
+            return null
         }
         return try {
             Gson().fromJson(res, GatewaySessionId::class.java).result.sessionId

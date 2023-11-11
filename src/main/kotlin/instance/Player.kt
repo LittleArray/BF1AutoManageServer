@@ -1,5 +1,6 @@
 package instance
 
+import api.BtrApi
 import api.GatewayApi
 import com.google.gson.Gson
 import data.*
@@ -186,7 +187,6 @@ class Player(
     val sessionId: String,
     p: PLBy22.ROST,
     var serverSetting: KMutableProperty0<Server.ServerSetting>,
-    map: String,
 ) {
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     private val loger: Logger = LoggerFactory.getLogger(this.javaClass)
@@ -214,26 +214,23 @@ class Player(
             }
             field = value
         }
-    var mapPretty: String = map
-        set(value) {
-            val old = field
-            if (old != value) {
-                //地图更新
-                isChangeMap = true
-                coroutineScope.launch {
-                    updateMatch()
-                    randomWpCheck(true)
-                    randomVpCheck(true)
-                }
-            }
-            field = value
-        }
     var teamName: String = ""
     var isExit = false
+    var isKick = false
+    var kickRes = ""
+    var kicKCD = 0
     var isChangeMap = false
+        set(value) {
+            if (value){
+                changeMap()
+                field = false
+            }
+        }
     var nextEnterTime = 0L
-    var oldKills = 0
-    var oldDeath = 0
+    var lkd :Double ?=null
+    var lkp :Double ?=null
+    var rkp :Double ?=null
+    var rkd :Double ?=null
 
     init {
         init()
@@ -243,6 +240,10 @@ class Player(
         loger.info("新玩家{}进入服务器{}", _p.NAME, serverSetting.get().gameId)
         isExit = false
         if (serverSetting.get().botlist.any { wl -> wl == _p.NAME }) return
+        if (serverSetting.get().vbanlist.any { wl -> wl == _p.NAME }) {
+            kick("VBan")
+            return
+        }
         if (nextEnterTime > 0) {
             if (System.currentTimeMillis() < nextEnterTime) {
                 kick("Wait ${SimpleDateFormat("mm").format(nextEnterTime - System.currentTimeMillis())}mins To Re-enter")
@@ -255,141 +256,62 @@ class Player(
         }
         coroutineScope.launch {
             kickAlwaysByStats()
-            delay((Math.random() * 1000).toLong())
             kickAlwaysByClassRank()
-            delay((Math.random() * 1000).toLong())
             kickByPlatoons()
-            delay((Math.random() * 1000).toLong())
-            randomWpCheck()
-            delay((Math.random() * 1000).toLong())
-            randomVpCheck()
+            kickByBtr()
         }
     }
-
-    suspend fun randomWpCheck(isAlwaysCheck: Boolean = false, times: Int = 0) {
+    private fun changeMap(){
+        coroutineScope.launch {
+            kickByBtr()
+        }
+    }
+    private suspend fun kickByBtr(times: Int = 0){
         if (isExit) return
-        //loger.info("随机查询{}武器",_p.NAME)
-        if (serverSetting.get().weaponLimited.isEmpty() && serverSetting.get().weaponStarLimited > 101) return
-        val weapons = getWeapons()
-        weapons?.result?.forEach { wp ->
-            wp.weapons.forEach {
-                val wps = it.stats.values
-                val name = it.name
-                val kickName = if (name.length > 10) name.subSequence(0, 10) else name
-                val kills = wps?.kills ?: 0
-                val shots = wps?.shots ?: kills
-                if (serverSetting.get().weaponLimited.any { wpl -> wpl == name }) {
-                    //loger.info("{}受限武器{}记录,当前击杀{},开火次数{}",_p.NAME, name,wps?.kills,wps?.shots)
-                    if (shots > (KitCache.cache[name]?.get(pid) ?: (shots + 1))) {
-                        kick("Ban $kickName", 15)
+        if (times > 5) return
+        if (serverSetting.get().recMaxKD > 5.0 && serverSetting.get().recMaxKPM > 5.0) return
+        val btrMatches = BtrApi.recentlyServerSearch(_p.NAME)
+        if (btrMatches == null) {
+            delay(60 * 1000)
+            kickByBtr(times + 1)
+            return
+        }
+        btrMatches.forEach {
+            var time = 0.0
+            var kills = 0
+            var deaths = 0
+            var kpm = 0.0
+            var winTeam = 0.0
+            var isWin = false
+            it.data?.metadata?.teams?.forEach {
+                if (it?.isWinner == true) winTeam = it.id ?:0.0
+            }
+            val matchTime = it.data?.metadata?.timestamp?.replace("T"," ")?.replace("+00:00","")?:"1970-01-01 00:00:00"
+            //2023-11-07T01:35:25+00:00
+            run p@{
+                it.data?.segments?.forEach {
+                    if (it?.attributes?.playerId?.toLong() == pid && it.type == "player"){
+                        time = it.stats?.time?.value?.div(60)?:0.0
+                        kills = (it.stats?.kills?.value?:0).toInt()
+                        deaths = (it.stats?.deaths?.value?:0).toInt()
+                        kpm = it.stats?.killsPerMinute?.value?:0.0
+                        isWin = winTeam == it.attributes.teamId
+                        return@p
                     }
-                }
-                if ((wps?.kills?.div(100) ?: 0) > serverSetting.get().weaponStarLimited) {
-                    //loger.info("{}的{}大于{}星,当前击杀{},开火次数{}",_p.NAME, name,serverSetting.get().weaponStarLimited,wps?.kills,wps?.shots)
-                    if (shots > (KitCache.cache[name]?.get(pid) ?: (shots + 1))) {
-                        kick("$kickName Over ${serverSetting.get().weaponStarLimited} Stars", 15)
-                    }
-                }
-                if (KitCache.cache[name].isNullOrEmpty()) {
-                    KitCache.cache[name] = mutableMapOf()
-                    KitCache.cache[name]?.put(pid, shots)
-                } else {
-                    KitCache.cache[name]?.put(pid, shots)
                 }
             }
-        }
-        if (weapons != null) {
-            return
-        } else {
-            loger.error("请求玩家{}武器数据失败,60s后重新查询", _p.NAME)
-            delay(60 * 1000)
-            randomWpCheck()
-        }
-        if (isAlwaysCheck && times < 5) {
-            loger.error("请求玩家{}武器数据失败,60s后重新查询", _p.NAME)
-            delay(60 * 1000)
-            randomWpCheck(true, times + 1)
-        }
-    }
-
-    suspend fun randomVpCheck(isAlwaysCheck: Boolean = false, times: Int = 0) {
-        if (isExit) return
-        if (serverSetting.get().vehicleLimited.isEmpty() && serverSetting.get().vehicleStarLimited > 101) return
-        //loger.info("随机查询{}武器",_p.NAME)
-        val vehicles = getVehicles()
-        vehicles?.result?.forEach { wp ->
-            wp.vehicles.forEach {
-                val vpn = it.stats.values
-                val name = it.name
-                val kickName = if (name.length > 10) name.subSequence(0,10) else name
-                val kills: Int = (vpn?.kills ?: 0).toInt()
-                if (serverSetting.get().vehicleLimited.any { wpl -> wpl == name }) {
-                    //loger.info("{}受限武器{}记录,当前击杀{},开火次数{}",_p.NAME, name,wps?.kills,wps?.shots)
-                    if (kills > (KitCache.cache[name]?.get(pid) ?: (kills + 1))) {
-                        kick("Ban $kickName", 15)
-                    }
-                }
-                if (kills / 100 > serverSetting.get().vehicleStarLimited) {
-                    //loger.info("{}的{}大于{}星,当前击杀{},开火次数{}",_p.NAME, name,serverSetting.get().weaponStarLimited,wps?.kills,wps?.shots)
-                    if (kills > (KitCache.cache[name]?.get(pid) ?: (kills + 1))) {
-                        kick("$kickName Over ${serverSetting.get().vehicleStarLimited} Stars", 15)
-                    }
-                }
-                if (KitCache.cache[name].isNullOrEmpty()) {
-                    KitCache.cache[name] = mutableMapOf()
-                    KitCache.cache[name]?.put(pid, kills)
-                } else {
-                    KitCache.cache[name]?.put(pid, kills)
-                }
+           // loger.info("{} RKD{} RKP{}",_p.NAME,kills.toDouble() / deaths.toDouble(),kpm)
+            if (kpm > 0 && kills >0){
+                rkp = rkp ?:kpm
+                rkd = rkd ?:(kills.toDouble() / deaths.toDouble())
             }
-        }
-        if (vehicles != null) {
-            return
-        } else {
-            loger.error("请求玩家{}载具数据失败,60s后重新查询", _p.NAME)
-            delay(60 * 1000)
-            randomVpCheck()
-        }
-        if (isAlwaysCheck && times < 5) {
-            loger.error("请求玩家{}载具数据失败,60s后重新查询", _p.NAME)
-            delay(60 * 1000)
-            randomVpCheck(true, times + 1)
-        }
-    }
-
-    private suspend fun updateMatch() {
-        if (isExit) return
-        val stats = getStats()
-        if (stats != null) {
-            var nowKills = stats.result.basicStats.kills
-            var nowDeath = stats.result.basicStats.deaths
-            if (nowKills > oldKills) {
-                val kills = nowKills - oldKills
-                val death = nowDeath - oldDeath
-                val kd = kills.toDouble() / death.toDouble()
-                if (kills > 0 && oldKills != 0 && oldDeath != 0) {
-                    loger.info(
-                        "服务器{}对局结算 玩家:{} 击杀:{} 死亡:{} 击杀死亡比:{}",
-                        serverSetting.get().gameId,
-                        _p.NAME,
-                        kills,
-                        death,
-                        kd
-                    )
-                    if (kills > serverSetting.get().matchKillsEnable) {
-                        if (kills > serverSetting.get().killsLimited) {
-                            kick("Kills Limited ${serverSetting.get().killsLimited}", 15)
-                        }
-                        if (kd > serverSetting.get().matchKDLimited) {
-                            kick("KD Limited ${serverSetting.get().matchKDLimited}", 15)
-                        }
-                    }
-                    oldKills = nowKills
-                    oldDeath = nowDeath
+            if (time > serverSetting.get().recPlayTime || kills > serverSetting.get().matchKillsEnable){
+                if ((kills.toDouble() / deaths.toDouble()) > serverSetting.get().recMaxKD){
+                    kick("Recently KD Limited ${serverSetting.get().recMaxKD}")
                 }
-            } else {
-                delay(60 * 1000)
-                updateMatch()
+                if ((kpm) > serverSetting.get().recMaxKPM){
+                    kick("Recently KPM Limited ${serverSetting.get().recMaxKPM}")
+                }
             }
         }
     }
@@ -399,10 +321,10 @@ class Player(
         val stats = getStats()
         if (stats != null) {
             //loger.info("玩家{}生涯数据:KD:{}", _p.NAME, stats.result.kdr)
-            oldKills = stats.result.basicStats.kills
-            oldDeath = stats.result.basicStats.deaths
             val kpm = stats.result.basicStats.kpm
             val kd = stats.result.kdr
+            lkd = lkd?:kd
+            lkp = lkp?:kpm
             val winPercent = stats.result.basicStats.wins.toDouble() / (stats.result.basicStats.wins + stats.result.basicStats.losses)
             val rank = ExperienceConversion.toRank(stats.result.basicStats.spm, stats.result.basicStats.timePlayed)
             if (kpm > serverSetting.get().lifeMaxKPM)
@@ -465,23 +387,22 @@ class Player(
         }
     }
 
-    fun update(p: PLBy22.ROST, map: String) {
-        mapPretty = map
+    fun update(p: PLBy22.ROST) {
         _p = p
+        if (isKick) kick(kickRes,kicKCD)
         //serverSetting = setting
     }
 
     fun exit() {
         loger.info("玩家{}离开服务器{}", _p.NAME, serverSetting.get().gameId)
-        KitCache.cache.forEach { name, pidd ->
-            pidd.remove(pid)
-        }
         isExit = true
     }
 
     fun kick(reason: String = "kick without reason", kickCD: Int = serverSetting.get().kickCD, times: Int = 0) {
         if (serverSetting.get().whitelist.any { wl -> wl == _p.NAME }) return
         if (serverSetting.get().adminlist.any { wl -> wl == _p.PID.toString() }) return
+        isKick = true
+        kickRes = reason
         val kickPlayer = GatewayApi.kickPlayer(sessionId, serverSetting.get().gameId.toString(), pid.toString(), reason)
         if (kickPlayer.reqBody.contains("Error", true)) {
             loger.error(
@@ -497,7 +418,10 @@ class Player(
             }
         } else {
             loger.info("在服务器{}踢出玩家{}成功,理由:{}", serverSetting.get().gameId.toString(), _p.NAME, reason)
-            if (kickCD > 0) nextEnterTime = System.currentTimeMillis() + (kickCD * 60 * 1000)
+            if (kickCD > 0) {
+                kicKCD = kickCD
+                nextEnterTime = System.currentTimeMillis() + (kickCD * 60 * 1000)
+            }
         }
     }
 
@@ -532,72 +456,24 @@ class Player(
      */
     private fun getStats(): GatewayStats? {
         val method = "Stats.detailedStatsByPersonaId"
-        val body = Gson().toJson(
-            JsonRpcObj(
-                method = method,
-                params = object {
-                    val game = "tunguska"
-                    val personaId = pid.toString()
-                }
-            )
+        val jsonRpcObj = JsonRpcObj(
+            method = method,
+            params = object {
+                val game = "tunguska"
+                val personaId = pid.toString()
+            }
         )
+
+        val body = Gson().toJson(jsonRpcObj)
         val builder = GatewayApi.jsonRpc(body, sessionId)
         if (builder.isSuccessful) {
             return try {
-                Gson().fromJson(builder.reqBody, GatewayStats::class.java)
+                val stats = Gson().fromJson(builder.reqBody, GatewayStats::class.java)
+                stats
             } catch (e: Exception) {
                 loger.error("获取{}玩家生涯数据失败,{}", pid, e.stackTraceToString())
                 null
             }
-            /*val bestcm = hashMapOf(
-                "Assault" to "突擊兵",
-                "Scout" to "偵察兵",
-                "Medic" to "醫護兵",
-                "Support" to "支援兵",
-                "Tanker" to "坦克",
-                "Cavalry" to "騎兵",
-                "Pilot" to "駕駛員",
-            )
-            bestcm.forEach { t, u ->
-                if (json.result.favoriteClass == t)
-                    pbInfo.bestClass = u
-            }
-            val cls: MutableList<PlayerBaseInfo.Classes> = mutableListOf()
-            val classRank = getClassRank()
-            json.result.kitStats.forEach {
-                cls.add(
-                    PlayerBaseInfo.Classes(
-                        className = it.prettyName,
-                        score = it.score,
-                        kills = it.kills,
-                        secondsPlayed = it.secondsAs,
-                        classRank = when(it.prettyName){
-                            "突擊兵"->classRank?.result?.assault?.rank?:0
-                            "偵察兵"->classRank?.result?.scout?.rank?:0
-                            "醫護兵"->classRank?.result?.medic?.rank?:0
-                            "支援兵"->classRank?.result?.support?.rank?:0
-                            "坦克"->classRank?.result?.tanker?.rank?:0
-                            "騎兵"->classRank?.result?.cavalry?.rank?:0
-                            "駕駛員"->classRank?.result?.pilot?.rank?:0
-                            else->0
-                        }
-                    )
-                )
-            }
-            val gme: MutableList<PlayerBaseInfo.Gamemode> = mutableListOf()
-            json.result.gameModeStats.forEach {
-                gme.add(
-                    PlayerBaseInfo.Gamemode(
-                        modeName = it.prettyName,
-                        wins = it.wins,
-                        losses = it.losses,
-                        winPercent = if (it.wins.toDouble() / (it.wins + it.losses) > 0) it.wins.toDouble() / (it.wins + it.losses) else 0.0,
-                        score = it.score
-                    )
-                )
-            }
-            pbInfo.classes = cls
-            pbInfo.gamemodes = gme*/
 
         }
         return null

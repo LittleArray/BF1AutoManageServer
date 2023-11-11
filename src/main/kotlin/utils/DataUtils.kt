@@ -16,16 +16,18 @@ object DataUtils {
     fun createDir() {
         File(currentDir + p + "data").mkdirs()
         File(currentDir + p + "setting").mkdirs()
+        val file = File(currentDir + p + "setting" + p + "INSTANCE.yaml")
+        if (!file.exists()) file.createNewFile()
     }
 
-    fun save(fileName: String, content: String) {
-        val file = File(currentDir + p + "setting" + p + fileName + ".json")
+    fun save(fileName: String, content: String,type:String = ".yaml") {
+        val file = File(currentDir + p + "setting" + p + fileName + type)
         file.createNewFile()
         file.writeText(content)
     }
 
-    fun load(fileName: String): String {
-        val file = File(currentDir + p + "setting" + p + fileName + ".json")
+    fun load(fileName: String,type:String = ".yaml"): String {
+        val file = File(currentDir + p + "setting" + p + fileName + type)
         return file.readText()
     }
 }

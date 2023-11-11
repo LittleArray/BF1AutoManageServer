@@ -1,10 +1,15 @@
 <configuration>
     <property name="LOG_HOME" value="logs"/>
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+
         <encoder>
             <!--[%thread]-->
+
             <pattern>%yellow(%d{HH:mm:ss}) %highlight(%-5level) %green(%logger:%line) - %msg%n</pattern>
         </encoder>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
     </appender>
     <!-- 每天生成日志文件,文件大小超过50则新生成一个文件，同时将旧文件按${LOG_HOME}/logs/aa.%d{yyyy-MM-dd}.%i.log.zip格式压缩，文件保存30天 -->
     <appender name="ALL" class="ch.qos.logback.core.rolling.RollingFileAppender">
@@ -19,7 +24,11 @@
         <encoder>
             <pattern>[%date{yyyy-MM-dd HH:mm:ss}] [%-5level] [%logger:%line] %msg%n</pattern>
         </encoder>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
     </appender>
+    <!-- 排除不需要打印的日志 -->
     <root level="DEBUG">
         <appender-ref ref="STDOUT"/>
         <appender-ref ref="ALL"/>
