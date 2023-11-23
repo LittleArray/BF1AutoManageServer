@@ -2,17 +2,15 @@ package api
 
 import api.GatewayApi.okHttpClient
 import com.google.gson.Gson
+import config.Config
 import data.BtrMatch
 import data.BtrMatches
 import data.PostResponse
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import okhttp3.Request
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import java.net.Proxy
-import java.util.*
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -64,7 +62,7 @@ object BtrApi {
         taskQueue.receive().invoke()
     }
 
-    fun recentlyServerSearch(eaid: String,times:Int= 0): MutableSet<BtrMatch>? {
+    fun recentlyServerSearch(eaid: String,count:Int,times:Int= 0): MutableSet<BtrMatch>? {
         val matches = build("https://api.tracker.gg/api/v2/bf1/standard/matches/origin/${eaid}")
         //println(matches.reqBody.replace("\n","").substring(0,26))
         if (!matches.isSuccessful) return null
@@ -74,25 +72,26 @@ object BtrApi {
             loger.error("btr请求失败,{}", matches.reqBody)
             return null
         }
-        val data: MutableSet<BtrMatch> = mutableSetOf()
+        var data: MutableSet<BtrMatch> ?= mutableSetOf()
         run p@{
             btrMatches.data.matches.forEachIndexed { index, it ->
-                if (index > 2) return@p
+                if (index + 1 > count) return@p
                 //val btrMatch = Cache.btrMatches[it.attributes.id] ?: Gson().fromJson(build("https://api.tracker.gg/api/v2/bf1/standard/matches/${it.attributes.id}").reqBody, BtrMatch::class.java)
-                val btrMatch = Gson().fromJson(build("http://ipv6.ffshaozi.top:8080/btr/getMatch/${it.attributes.id}").reqBody, BtrMatch::class.java)
+                val btrMatch = Gson().fromJson(build("${Config.Config.serverUrl}/btr/getMatch/${it.attributes.id}").reqBody, BtrMatch::class.java)
                 if (btrMatch != null){
-                    data.add(btrMatch)
+                    data?.add(btrMatch)
                 }
                 runBlocking {
                     delay(1000)
                 }
             }
         }
-        return if (data.size == 0 && times < 5){
+        return if (data?.size == 0 && times < 5){
+            data = null
             runBlocking {
                 delay(5000)
             }
-            recentlyServerSearch(eaid, times + 1)
+            recentlyServerSearch(eaid, count,times + 1)
         }else{
             data
         }

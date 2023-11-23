@@ -28,6 +28,7 @@ object DataUtils {
 
     fun load(fileName: String,type:String = ".yaml"): String {
         val file = File(currentDir + p + "setting" + p + fileName + type)
+        if (!file.exists()) file.createNewFile()
         return file.readText()
     }
 }

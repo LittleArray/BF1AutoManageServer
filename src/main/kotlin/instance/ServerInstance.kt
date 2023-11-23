@@ -19,7 +19,14 @@ object ServerInstance {
     fun removeServer(gameID: Long): Boolean {
         return INSTANCE.removeIf { it.serverSetting.gameId == gameID }
     }
-
+    fun getOpServer(token:String,gameID: Long): Server? {
+        INSTANCE.forEach {
+            if (it.serverSetting.gameId == gameID && it.serverSetting.token == token){
+                return it
+            }
+        }
+        return null
+    }
     fun save() {
         var content = ""
         INSTANCE.forEach {

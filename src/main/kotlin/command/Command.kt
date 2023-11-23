@@ -6,6 +6,7 @@ import instance.ServerInstance
 import api.GatewayApi
 import instance.Server
 import com.google.gson.Gson
+import config.Config
 import data.GatewayServerSearch
 import instance.Player
 import org.slf4j.Logger
@@ -28,6 +29,40 @@ object Command {
     fun cmd(cmd: String) {
         val split = cmd.split(" ")
         when (split[0]) {
+            "help" ->{
+                loger.info("""
+                    帮助:
+                    reload -重载所有服务器配置文件
+                    stop   -保存并关闭本工具
+                    save   -保存所有服务器配置文件
+                    list -获取已被托管的服务器列表
+                    ls   -获取已被托管的服务器详细信息
+                    ss 关键字 -搜索服务器,请先添加一个服务器,否则无法使用
+                    --
+                    add 服务器gameid 管服号sessionID  -添加服务器
+                    remove 服务器gameid -删除服务器
+                    update -更新所有管服号的sessionID,前提是配置中填入了sid和remid
+                    k ID 理由 -踢出玩家,理由可选
+                    b ID -实体Ban玩家
+                    grsp 服务器gameid -获取图池以及服务器详细信息
+                    qt 服务器gameid 图池编号 -切图,图池编号用grsp命令获取
+                    boom 服务器gameid 理由 -炸服,理由可选
+                    awl 服务器gameid ID -添加白名单
+                    rwl 服务器gameid ID -移除白名单
+                    av 服务器gameid ID -添加Vip,不推荐在这添加
+                    aghsbots 服务器gameid url -添加GHS的bot白名单,url自己找
+                """.trimIndent())
+            }
+            "reload" ->{
+                ServerInstance.INSTANCE.forEach {
+                    it.loadServer()
+                }
+            }
+            "save" ->{
+                ServerInstance.INSTANCE.forEach {
+                    it.saveServer()
+                }
+            }
             "add" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
@@ -46,7 +81,6 @@ object Command {
                     loger.info("添加失败")
                 }
             }
-
             "remove" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
@@ -64,13 +98,11 @@ object Command {
                     loger.info("移除失败")
                 }
             }
-
             "list" -> {
                 ServerInstance.INSTANCE.forEach {
                     loger.info("服务器{}", it.serverSetting.gameId)
                 }
             }
-
             "ss" -> {
                 val reqBody = GatewayApi.searchServer(
                     split.getOrNull(1) ?: "",
@@ -80,13 +112,11 @@ object Command {
                     loger.info("服名:${it.name} GameID:${it.gameId} ${it.mapNamePretty} - ${it.mapModePretty}")
                 }
             }
-
             "update" -> {
                 ServerInstance.INSTANCE.forEach {
                     it.updateSessionID()
                 }
             }
-
             "boom" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
@@ -106,32 +136,6 @@ object Command {
                     }
                 }
             }
-
-            "aclassl" -> {
-                val gameID = try {
-                    split.getOrNull(1)?.toLong()
-                } catch (e: Exception) {
-                    loger.error("非法参数")
-                    return
-                }
-                val className = split.getOrNull(2)
-                val rank = try {
-                    split.getOrNull(3)?.toInt()
-                } catch (e: Exception) {
-                    loger.error("非法参数")
-                    return
-                }
-                if (gameID == null || className == null || rank == null) {
-                    loger.error("缺少参数")
-                    return
-                }
-                ServerInstance.INSTANCE.forEach {
-                    if (it.serverSetting.gameId == gameID) {
-                        it.serverSetting.classRankLimited.put(className, rank)
-                    }
-                }
-            }
-
             "awl" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
@@ -150,7 +154,24 @@ object Command {
                     }
                 }
             }
-
+            "rwl" -> {
+                val gameID = try {
+                    split.getOrNull(1)?.toLong()
+                } catch (e: Exception) {
+                    loger.error("非法参数")
+                    return
+                }
+                val name = split.getOrNull(2)
+                if (gameID == null || name == null) {
+                    loger.error("缺少参数")
+                    return
+                }
+                ServerInstance.INSTANCE.forEach {
+                    if (it.serverSetting.gameId == gameID) {
+                        it.serverSetting.whitelist.remove(name)
+                    }
+                }
+            }
             "aghsbots" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
@@ -177,7 +198,6 @@ object Command {
                     }
                 }
             }
-
             "qt" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
@@ -203,7 +223,6 @@ object Command {
                 }
 
             }
-
             "grsp" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
@@ -221,7 +240,29 @@ object Command {
                     }
                 }
             }
-
+            "av" ->{
+                val gameID = try {
+                    split.getOrNull(1)?.toLong()
+                } catch (e: Exception) {
+                    loger.error("非法参数")
+                    return
+                }
+                val name = try {
+                    split.getOrNull(2)
+                } catch (e: Exception) {
+                    loger.error("非法参数")
+                    return
+                }
+                if (gameID == null || name == null) {
+                    loger.error("缺少参数")
+                    return
+                }
+                ServerInstance.INSTANCE.forEach {
+                    if (it.serverSetting.gameId == gameID) {
+                        it.addVip(name)
+                    }
+                }
+            }
             "k" -> {
                 val list = mutableListOf<Player>()
                 ServerInstance.INSTANCE.forEach {
@@ -240,7 +281,6 @@ object Command {
                     }
                 }
             }
-
             "kid" -> {
                 val pid = split.getOrNull(1) ?: ""
                 ServerInstance.INSTANCE.forEach {
@@ -257,7 +297,6 @@ object Command {
                     ) else loger.error("在服务器{}踢出{}失败", it.serverSetting.gameId, pid)
                 }
             }
-
             "b" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
@@ -277,22 +316,15 @@ object Command {
                 }
                 ServerInstance.INSTANCE.forEach {
                     if (it.serverSetting.gameId == gameID) {
-                        val rspInfo = it.getRSPInfo()
-                        val ban = GatewayApi.addServerBan(
-                            it.serverSetting.sessionID,
-                            rspInfo?.rspInfo?.server?.serverId?.toInt() ?: 0,
-                            name
-                        )
-                        if (ban.isSuccessful) loger.info("{}封禁成功", name)
+                        it.addBan(name)
                     }
                 }
             }
-
             "stop" -> {
                 ServerInstance.save()
+                Config.saveConfig()
                 exitProcess(0)
             }
-
             "ls" -> {
                 ServerInstance.INSTANCE.forEach {
                     val rspInfo = it.getRSPInfo()

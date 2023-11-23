@@ -24,6 +24,7 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.4.2")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.15.0")
+    implementation("io.gitee.liuzhihai520:ZHConverter:1.1")
 }
 
 tasks.test {

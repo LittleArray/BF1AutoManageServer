@@ -2,17 +2,22 @@ package instance
 
 import api.*
 import com.charleskorn.kaml.Yaml
+import com.charleskorn.kaml.YamlComment
 import com.google.gson.Gson
+import command.Command
 import data.PostResponse
 import data.Result
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.InheritableSerialInfo
+import kotlinx.serialization.SerialInfo
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import utils.ChineseTR.toSimplified
 import utils.DataUtils
 import java.util.UUID
 
@@ -86,6 +91,7 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
     var soldier = 0
     var spectator = 0
     var queue = 0
+    var loaderr = false
     var mapName = ""
         set(value) {
             mapCache.forEach { name, pre ->
@@ -105,28 +111,50 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
             field = value
         }
     @Serializable
-    class ServerSetting(
+    data class ServerSetting(
+        @YamlComment("服务器RSPID")
         var rspId: Long = 0,
+        @YamlComment("仅使用BFEAC踢挂")
+        var onlyBFEAC : Boolean = false,
+        @YamlComment("对接接口的Token(未开放)")
         var token: String = UUID.randomUUID().toString(),
+        @YamlComment("服务器GameID")
         var gameId: Long = 0,
+        @YamlComment("管服账号的sessionID")
         var sessionID: String = "",
+        @YamlComment("管服账号的sid")
         var sid: String = "",
+        @YamlComment("管服账号的remid")
         var remid: String = "",
-        var lifeMaxKD: Double = 5.0,
-        var lifeMaxKPM: Double = 5.0,
-        var lifeMaxKPM95: Double = 5.0,
-        var lifeMaxKD95: Double = 5.0,
-        var lifeMaxKPM150: Double = 5.0,
-        var lifeMaxKD150: Double = 5.0,
-        var recMaxKPM: Double = 5.0,
-        var recMaxKD: Double = 5.0,
+        @YamlComment("以下数据任意一个超过5.0的都不做判断","服务器内玩家最高生涯KD")
+        var lifeMaxKD: Double = 5.1,
+        @YamlComment("服务器内玩家最高生涯KPM")
+        var lifeMaxKPM: Double = 5.1,
+        @YamlComment("服务器内玩家最高最近KPM")
+        var recMaxKPM: Double = 5.1,
+        @YamlComment("服务器内玩家最高最近KD","最近限制数据来自Btr,该功能是给noob服设计的,当然其他服也能用,一般情况下限制设置的比生涯限制高一点就行")
+        var recMaxKD: Double = 5.1,
+        @YamlComment("在超过此游玩时长(单位:分钟)的对局中计算最近数据","超过30不做判断")
         var recPlayTime: Double = 31.0,
+        @YamlComment("最近数据超过这个击杀数后忽略游玩时长并计算最近数据")
         var matchKillsEnable: Int = 999,
+        @YamlComment("计算最近对局的数量","数量越多踢得人越多,但是更能防止捞逼")
+        var recCount: Int = 3,
+        @YamlComment("踢出CD")
         var kickCD: Int = 0,
+        @YamlComment("如果超过这个数量的实体Ban则踢出")
+        var tooManyBan: Int = 3,
+        @YamlComment("启用低等级严管","游戏时长小与30h的都会触发低等级管理机制","如果误触发请加本工具的白名单","默认启用")
+        var lowRankMan: Boolean = true,
+        @YamlComment("胜率限制,0.0-1.0(小数非百分比)","超过1不做判断")
         var winPercentLimited: Double = 1.1,
+        @YamlComment("等级限制","超过150不做判断")
         var rankLimited: Int = 151,
+        @YamlComment("禁止快速重进服务器,默认关闭")
         var reEnterKick: Boolean = false,
+        @YamlComment("禁止非管理观战,默认关闭")
         var spectatorKick: Boolean = false,
+        @YamlComment("对应兵种等级限制,默认不限制")
         var classRankLimited: MutableMap<String, Int> = mutableMapOf(
             Pair("assault",51),
             Pair("cavalry",51),
@@ -134,23 +162,27 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
             Pair("pilot",51),
             Pair("tanker",51),
         ),
+        @YamlComment("战队限制,请填入战队完整名称,不是缩写")
         var platoonLimited: MutableList<String> = mutableListOf(),
+        @YamlComment("白名单")
         var whitelist: MutableList<String> = mutableListOf(),
+        @YamlComment("机器人白名单")
         var botlist: MutableList<String> = mutableListOf(),
+        @YamlComment("VBan")
         var vbanlist: MutableList<String> = mutableListOf(),
+        @YamlComment("管理员PID列表,不用管")
         var adminlist: MutableList<String> = mutableListOf()
     ) {
-        override fun toString(): String {
+        /*override fun toString(): String {
             return "$gameId $lifeMaxKD $lifeMaxKPM $winPercentLimited $classRankLimited"
-        }
+        }*/
     }
 
     fun saveServer() {
+        val serializer = ServerSetting.serializer()
+        if (loaderr) return
         try {
-            DataUtils.save(
-                "ServerSetting_${serverSetting.gameId}",
-                Yaml.default.encodeToString(ServerSetting.serializer(),serverSetting)
-            )
+            DataUtils.save("ServerSetting_${serverSetting.gameId}", Yaml.default.encodeToString(ServerSetting.serializer(),serverSetting))
             loger.info("服务器{}数据保存成功", serverSetting.gameId)
         } catch (e: Exception) {
             loger.info("服务器{}数据保存失败 {}", serverSetting.gameId, e.stackTraceToString())
@@ -164,6 +196,8 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
             loger.info("服务器配置:{}", serverSetting.toString())
         } catch (e: Exception) {
             loger.info("服务器{}数据载入失败 {}", serverSetting.gameId, e.stackTraceToString())
+            loaderr = true
+            DataUtils.save("ServerSetting_${serverSetting.gameId}.back", DataUtils.load("ServerSetting_${serverSetting.gameId}"))
         }
     }
 
@@ -206,8 +240,8 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
             //离开玩家
             playerList.removeIf {
                 if (list.GDAT[0].ROST.none { e -> e.PID == it.pid }) {
-                    if(it.nextEnterTime > 0){
-                        if (System.currentTimeMillis() > it.nextEnterTime){
+                    if(it.nextEnterTime > 0){//如果存在cd
+                        if (System.currentTimeMillis() > it.nextEnterTime){//如果超时
                             it.exit()
                             true
                         }else{
@@ -281,5 +315,51 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         }else{
             null
         }
+    }
+    fun getMap():List<String>{
+        val result = getRSPInfo()
+        val list = mutableListOf<String>()
+        result?.serverInfo?.rotation?.forEach {
+            list.add(it.mapPrettyName.toSimplified())
+        }
+        return list
+    }
+    fun addVip(id:String): Boolean {
+        val result = getRSPInfo()
+        val vip = GatewayApi.addServerVIP(serverSetting.sessionID, result?.rspInfo?.server?.serverId?.toInt() ?: 0, id)
+        if (vip.isSuccessful) loger.info("添加vip成功 {} {}",id,serverSetting.gameId)
+        return vip.isSuccessful
+    }
+    fun removeVip(pid:String): Boolean {
+        val result = getRSPInfo()
+        val vip = GatewayApi.removeServerVIP(serverSetting.sessionID, result?.rspInfo?.server?.serverId?.toInt() ?: 0, pid)
+        if (vip.isSuccessful) loger.info("移除vip成功 {} {}",pid,serverSetting.gameId)
+        return vip.isSuccessful
+    }
+    fun addBan(id:String): Boolean {
+        val rspInfo = getRSPInfo()
+        val ban = GatewayApi.addServerBan(
+            serverSetting.sessionID,
+            rspInfo?.rspInfo?.server?.serverId?.toInt() ?: 0,
+            id
+        )
+        if (ban.isSuccessful) loger.info("{}封禁成功", id)
+        return ban.isSuccessful
+    }
+    fun removeBan(pid: String):Boolean{
+        val rspInfo = getRSPInfo()
+        val ban = GatewayApi.removeServerBan(
+            serverSetting.sessionID,
+            rspInfo?.rspInfo?.server?.serverId?.toInt() ?: 0,
+            pid
+        )
+        if (ban.isSuccessful) loger.info("{}解禁成功", pid)
+        return ban.isSuccessful
+    }
+    fun addVBan(id: String): Boolean {
+        return serverSetting.vbanlist.add(id)
+    }
+    fun removeVban(id: String):Boolean{
+        return serverSetting.vbanlist.remove(id)
     }
 }

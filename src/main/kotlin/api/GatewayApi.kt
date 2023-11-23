@@ -14,6 +14,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import utils.ChineseTR.toTradition
 import java.net.InetSocketAddress
 import java.net.Proxy
 import java.net.SocketAddress
@@ -81,7 +82,7 @@ object GatewayApi {
                     val game = "tunguska"
                     val gameId = gameId
                     val personaId = personaId
-                    val reason = reason
+                    val reason = reason.toTradition()
                 }
             )
         )
