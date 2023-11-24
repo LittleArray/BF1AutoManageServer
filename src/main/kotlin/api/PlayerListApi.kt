@@ -1,6 +1,7 @@
 package api
 
 import com.google.gson.Gson
+import config.Config
 import data.PLBy22
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Request
@@ -29,7 +30,10 @@ object PlayerListApi {
                 .build()
             val response = GatewayApi.okHttpClient
                 .newBuilder()
-                .proxy(Proxy(Proxy.Type.HTTP, GatewayApi.sa))
+                .apply {
+                    if (Config.sa != null)
+                        proxy(Proxy(Proxy.Type.HTTP, Config.sa))
+                }
                 .build()
                 .newCall(request).execute()
             return if (response.isSuccessful) {

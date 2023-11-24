@@ -1,6 +1,7 @@
 package api
 
 import com.google.gson.Gson
+import config.Config.sa
 import data.FullServerInfoJson
 import data.JsonRpcObj
 import data.PostResponse
@@ -31,7 +32,7 @@ import java.util.concurrent.TimeUnit
 
 object GatewayApi {
     val okHttpClient = OkHttpClient()
-    var sa: SocketAddress = InetSocketAddress("127.0.0.1", 7890)
+
     val taskQueue = Channel<suspend () -> PostResponse>(2)
     private val loger: Logger = LoggerFactory.getLogger(this.javaClass)
     fun jsonRpc(body: String, sessionId: String = ""): PostResponse = runBlocking {
@@ -50,7 +51,10 @@ object GatewayApi {
                             .build()
                         val response = okHttpClient
                             .newBuilder()
-                            .proxy(Proxy(Proxy.Type.HTTP, sa))
+                            .apply {
+                                if (sa != null)
+                                    proxy(Proxy(Proxy.Type.HTTP, sa))
+                            }
                             .connectTimeout(30, TimeUnit.SECONDS)//设置连接超时时间
                             .readTimeout(30, TimeUnit.SECONDS)//设置读取超时时间
                             .build().newCall(request).execute()

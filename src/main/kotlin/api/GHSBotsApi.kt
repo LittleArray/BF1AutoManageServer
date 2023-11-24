@@ -1,6 +1,7 @@
 package api
 
 import api.GatewayApi.okHttpClient
+import config.Config
 import data.PostResponse
 import okhttp3.Request
 import org.slf4j.Logger
@@ -90,7 +91,15 @@ object GHSBotsApi {
             val request = Request.Builder()
                 .url(url)
                 .build()
-            val response = okHttpClient.newBuilder().proxy(Proxy(Proxy.Type.HTTP, GatewayApi.sa)).build().newCall(request).execute()
+            val response = okHttpClient
+                .newBuilder()
+                .apply {
+                    if (Config.sa != null)
+                        proxy(Proxy(Proxy.Type.HTTP, Config.sa))
+                }
+                .build()
+                .newCall(request)
+                .execute()
             return if (response.isSuccessful) {
                 val res = response.body.string()
                 PostResponse(isSuccessful = true, reqBody = res)
