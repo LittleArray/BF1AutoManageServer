@@ -61,6 +61,8 @@ object QQBotApi {
         val param = Param(gameid, token,ctx.pathParam("param").split(","))
         loger.info("接收到来自QQ群的管服请求:{} 操作人:{} 操作token:{}",qqGroup,qqID,token)
         when (method) {
+            "awl" -> awl(ctx,param)
+            "rwl" -> awl(ctx,param)
             "kick" -> kick(ctx, param)
             "obscureKick" -> obscureKick(ctx, param)
             "boom" -> boom(ctx, param)
@@ -74,6 +76,37 @@ object QQBotApi {
             else -> {
                 ctx.json(Res(ErrCode.INVALID_METHOD, "无效的方法名"))
             }
+        }
+    }
+
+    private fun awl(ctx: Context, param: Param) {
+        //ID
+        if (param.param.isEmpty()) {
+            ctx.json(Res(ErrCode.PARAMETERS_ARE_MISSING, "参数不足"))
+            return
+        }
+        val wlID = param.param[0]
+        loger.info("申请加白名单 {} 服务器为 {}",wlID,param.gameID)
+        val opServer = ServerInstance.getOpServer(param.token, param.gameID)
+        if (opServer == null){
+            ctx.json(Res(ErrCode.NOT_FOUND, "找不到服务器或token无效"))
+        }else{
+            ctx.json(Res(ErrCode.OK,opServer.serverSetting.whitelist.add(wlID)))
+        }
+    }
+    private fun rwl(ctx: Context, param: Param) {
+        //ID
+        if (param.param.isEmpty()) {
+            ctx.json(Res(ErrCode.PARAMETERS_ARE_MISSING, "参数不足"))
+            return
+        }
+        val wlID = param.param[0]
+        loger.info("申请移除白名单 {} 服务器为 {}",wlID,param.gameID)
+        val opServer = ServerInstance.getOpServer(param.token, param.gameID)
+        if (opServer == null){
+            ctx.json(Res(ErrCode.NOT_FOUND, "找不到服务器或token无效"))
+        }else{
+            ctx.json(Res(ErrCode.OK,opServer.serverSetting.whitelist.remove(wlID)))
         }
     }
 
