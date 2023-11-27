@@ -143,6 +143,8 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         var recCount: Int = 3,
         @YamlComment("踢出CD")
         var kickCD: Int = 0,
+        @YamlComment("踢出高延迟,0为不限制")
+        var maxPing: Int = 0,
         @YamlComment("如果超过这个数量的实体Ban则踢出")
         var tooManyBan: Int = 3,
         @YamlComment("启用低等级严管","游戏时长小与30h的都会触发低等级管理机制","如果误触发请加本工具的白名单","默认启用")

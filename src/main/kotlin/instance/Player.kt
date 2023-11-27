@@ -98,7 +98,11 @@ class Player(
             kickByBtr()
         }
     }
-
+    private suspend fun kickByLan(){
+        if (serverSetting.get().maxPing != 0)
+            if ((_p.PATT?.latency?:"0").toInt() > serverSetting.get().maxPing)
+                kick("Lag ${_p.PATT?.latency}ms")
+    }
     private suspend fun getBaseInfo(times: Int = 0) {
         baseInfo = ApiCore.getBaseInfo(pid.toString(), "false")
         if (baseInfo == null && times < 5) {
@@ -352,6 +356,9 @@ class Player(
 
     fun update(p: PLBy22.ROST) {
         _p = p
+        coroutineScope.launch {
+            kickByLan()
+        }
         if (isKick) {
             if (kickTimes < 15) {
                 kick(kickRes, kicKCD)
