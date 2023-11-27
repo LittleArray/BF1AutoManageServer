@@ -165,7 +165,7 @@ object QQBotApi {
         }else{
             val kickList = mutableListOf<Player>()
             opServer.playerList.forEach {
-                if (it._p.NAME == kickID){
+                if (it._p.NAME.indexOf(kickID,0,true) != -1 ){
                     kickList.add(it)
                 }
             }
