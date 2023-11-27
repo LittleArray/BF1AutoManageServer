@@ -106,6 +106,7 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
                 loger.info("服务器{}地图变更:{}", serverSetting.gameId, value)
                 playerList.forEach {
                     it.isChangeMap = true
+                    it.map = mapName
                 }
             }
             field = value

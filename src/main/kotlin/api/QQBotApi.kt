@@ -175,11 +175,7 @@ object QQBotApi {
                 }
                 1 -> {
                     kickList.first().kick(reason, kickCD)
-                    ctx.json(Res(ErrCode.OK, {
-                        val NAME = kickID
-                        val COOLDOWN = kickCD
-                        val REASON = reason
-                    }))
+                    ctx.json(Res(ErrCode.OK, "踢出成功${kickID} 理由:${reason}"))
                 }
                 else ->{
                     kickList.first().kick(reason, kickCD)
