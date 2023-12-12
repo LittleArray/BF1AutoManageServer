@@ -3,13 +3,15 @@ package instance
 import api.ApiCore
 import api.BtrApi
 import api.GatewayApi
-import com.google.gson.Gson
-import data.*
-import kotlinx.coroutines.*
+import data.PLBy22
+import data.PlayerBaseInfo
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import utils.ChineseTR.toTradition
-import java.text.SimpleDateFormat
 import kotlin.reflect.KMutableProperty0
 
 /**
@@ -30,6 +32,8 @@ class Player(
             val old = field
             if (old.JGTS != value.JGTS) {//加入时间变更了
                 loger.info("玩家{}进服时间变更 {} -> {}", value.NAME, old.JGTS, value.JGTS)
+                exit()
+                init()
             }
             if (old.ROLE != value.ROLE) {//身份变更
                 loger.info("玩家{}身份变更 {}", value.NAME, value.ROLE)
@@ -39,18 +43,18 @@ class Player(
             }
             if (old.TIDX != value.TIDX) {//队伍变更
                 if (!isChangeMap) {
-                    loger.info("玩家{}队伍变更 {} -> {}", value.NAME, old.TEAMNAME, value.TEAMNAME)
+                    loger.info("玩家{}队伍变更 {} ->  {} ", value.NAME, old.TEAMNAME, value.TEAMNAME)
                 } else {
                     isChangeMap = false
                 }
             }
+            if (old.PATT?.latency != value.PATT?.latency){
+                kickByLan()
+            }
             field = value
         }
-    private var isExit = false
-    private var isKick = false
-    private var kickTimes = 0
     private var kickRes = ""
-    private var kicKCD = 0
+    private var KickCD: Int? = null
     var nextEnterTime = 0L
     var map = ""
     var isChangeMap = false
@@ -64,6 +68,7 @@ class Player(
     var lkp: Double? = null
     var rkp: Double? = null
     var rkd: Double? = null
+    var rtime: Double? = null
     var baseInfo: PlayerBaseInfo? = null
 
     init {
@@ -71,10 +76,16 @@ class Player(
     }
 
     fun init() {
-        loger.info("新玩家{}进入服务器{}", _p.NAME, serverSetting.get().gameId)
-        isExit = false
+        loger.info("新玩家 {} 进入服务器 {} ", _p.NAME, serverSetting.get().gameId)
         if (serverSetting.get().onlyBFEAC) return
         if (serverSetting.get().botlist.any { wl -> wl == _p.NAME }) return
+        if (config.Config.Config.botlist.any { wl -> wl == _p.NAME }) return
+        if (serverSetting.get().killsMax > 0) {
+            if ((serverSetting.get().killsMap[pid.toString()] ?: 0) > serverSetting.get().killsMax) {
+                kick("请联系管理员")
+                return
+            }
+        }
         if (serverSetting.get().vbanlist.any { wl -> wl == _p.NAME }) {
             kick("VBan")
             return
@@ -98,15 +109,17 @@ class Player(
             kickByBtr()
         }
     }
-    private suspend fun kickByLan(){
+
+    private fun kickByLan() {
         if (serverSetting.get().maxPing != 0)
-            if ((_p.PATT?.latency?:"0").toInt() > serverSetting.get().maxPing)
+            if ((_p.PATT?.latency ?: "0").toInt() > serverSetting.get().maxPing)
                 kick("Lag ${_p.PATT?.latency}ms")
     }
+
     private suspend fun getBaseInfo(times: Int = 0) {
         baseInfo = ApiCore.getBaseInfo(pid.toString(), "false")
         if (baseInfo == null && times < 5) {
-            loger.error("请求玩家{}生涯失败,5s后重新查询", _p.NAME)
+            loger.error("请求玩家 {} 生涯失败,5s后重新查询", _p.NAME)
             delay(5000)
             getBaseInfo(times + 1)
         }
@@ -118,66 +131,48 @@ class Player(
         }
     }
 
-    private suspend fun kickByTooManyBan() {
-        if (isExit) return
+    private fun kickByTooManyBan() {
         if ((ApiCore.getBan(pid.toString())?.size ?: 0) > serverSetting.get().tooManyBan) {
             kick("Too Many Ban")
         }
     }
 
-    private suspend fun kickByBtr(times: Int = 0) {
-        if (isExit) return
+    private fun kickByBtr(times: Int = 0) {
         if (times > 5) return
-        if (serverSetting.get().recMaxKD > 5.0 || serverSetting.get().recMaxKPM > 5.0 || serverSetting.get().recPlayTime > 30) return
-        val btrMatches = BtrApi.recentlyServerSearch(_p.NAME, serverSetting.get().recCount)
-        if (btrMatches == null) {
-            delay(60 * 1000)
-            kickByBtr(times + 1)
-            return
-        }
+        if (serverSetting.get().recMaxKD > 5.0 && serverSetting.get().recMaxKPM > 5.0 && serverSetting.get().recPlayTime > 30) return
+        val btrMatches = BtrApi.recentlyServerSearch(_p.NAME, pid.toString(), serverSetting.get().recCount)
+        var time = 0.0
+        var kills = 0
+        var deaths = 0
         btrMatches.forEach {
-            var time = 0.0
-            var kills = 0
-            var deaths = 0
-            var kpm = 0.0
-            var winTeam = 0.0
-            var isWin = false
-            it.data?.metadata?.teams?.forEach {
-                if (it?.isWinner == true) winTeam = it.id ?: 0.0
+            //最近3小时
+            //loger.info(" {}   {} ",System.currentTimeMillis(),MatchTime.time + 1000 * 60 * 60 * 8 + (3 * 60 * 60 * 1000))
+            val ntime = it.stats?.time?.value?.div(60) ?: 0.0
+            val nkills = (it.stats?.kills?.value?.toInt() ?: 0) + (it.stats?.killsAssistAsKills?.value?.toInt() ?:0)
+            val ndeaths = it.stats?.deaths?.value?.toInt() ?: 0
+            time += ntime
+            kills += nkills
+            deaths += ndeaths
+        }
+        val kpm = kills / time
+        val kd = kills.toDouble() / deaths.toDouble()
+        loger.debug(" {}  Kills: {}  RKD: {}  RKP: {}  Time: {} ", _p.NAME, kills, kd, kpm, time)
+        if (kpm > 0 && kd > 0) {
+            rkp = rkp ?: kpm
+            rkd = rkd ?: kd
+            rtime = time
+        }
+        if (kills > serverSetting.get().matchKillsEnable) {
+            if (kd > serverSetting.get().recMaxKD) {
+                kick("Recently KD Limited ${serverSetting.get().recMaxKD}")
             }
-            //val matchTime = it.data?.metadata?.timestamp?.replace("T", " ")?.replace("+00:00", "") ?: "1970-01-01 00:00:00"
-            //2023-11-07T01:35:25+00:00
-            run p@{
-                it.data?.segments?.forEach {
-                    if (it?.attributes?.playerId?.toLong() == pid && it.type == "player") {
-                        time = it.stats?.time?.value?.div(60) ?: 0.0
-                        kills = (it.stats?.kills?.value ?: 0).toInt()
-                        deaths = (it.stats?.deaths?.value ?: 0).toInt()
-                        kpm = it.stats?.killsPerMinute?.value ?: 0.0
-                        isWin = winTeam == it.attributes.teamId
-                        return@p
-                    }
-                }
-            }
-            // loger.info("{} RKD{} RKP{}",_p.NAME,kills.toDouble() / deaths.toDouble(),kpm)
-            if (kpm > 0 && kills > 0) {
-                rkp = rkp ?: kpm
-                rkd = rkd ?: (kills.toDouble() / deaths.toDouble())
-            }
-            if (time > serverSetting.get().recPlayTime || kills > serverSetting.get().matchKillsEnable) {
-                if ((kills.toDouble() / deaths.toDouble()) > serverSetting.get().recMaxKD) {
-                    kick("Recently KD Limited ${serverSetting.get().recMaxKD}")
-                }
-                if ((kpm) > serverSetting.get().recMaxKPM) {
-                    kick("Recently KPM Limited ${serverSetting.get().recMaxKPM}")
-                }
+            if (kpm > serverSetting.get().recMaxKPM) {
+                kick("Recently KPM Limited ${serverSetting.get().recMaxKPM}")
             }
         }
-        System.gc()
     }
 
     private suspend fun kickAlwaysByStats() {
-        if (isExit) return
         if (baseInfo == null) {
             delay(5000)
             kickAlwaysByStats()
@@ -185,7 +180,6 @@ class Player(
         }
         val info = baseInfo!!
         val winPercent = info.wins.toDouble() / (info.wins + info.losses)
-        val time = info.timePlayed.toDouble() / 60.0 / 60.0
         val kpm = info.kpm
         val kd = info.kd
         val rank = info.rank
@@ -199,90 +193,10 @@ class Player(
             kick("WinPercent Limited ${serverSetting.get().winPercentLimited * 100}%")
         if (rank > serverSetting.get().rankLimited)
             kick("Rank Limited ${serverSetting.get().rankLimited}")
-        //低等级严管 45小时以下
-        if (time < 45 && serverSetting.get().whitelist.none { it == _p.NAME } && serverSetting.get().lowRankMan) {//whitelist白名单,就是正常或者待观察的
-            if (info.kills > 100) {
-                if (info.accuracy > 0.5) {
-                    loger.warn("[{}]{}低等级玩家数据异常生涯准确率>50%", rank, _p.NAME)
-                    kick("Low Rank Life ACC Anomaly")
-                }
-                if ((info.headShots.toDouble() / info.kills.toDouble()) > 0.5) {
-                    loger.warn("[{}]{}低等级玩家数据异常生涯爆头率>50%", rank, _p.NAME)
-                    kick("Low Rank Life HS Anomaly")
-                }
-            }
-            val weapons = ApiCore.getWeapons(pid.toString())
-            weapons?.data?.forEach {
-                val acc = it.accuracy ?: 0.0//后端处理过了
-                val kills = (it.kills ?: 0)
-                var vp = (it.hits?.toDouble()?.div(kills.toDouble()) ?: 999.0)
-                vp = if (vp == 0.0) 999.0 else vp
-                val wkpm = (it.kills?.toDouble() ?: 0.0) / (it.seconds?.div(60.0) ?: 0.0)
-                val hs = try {
-                    (it.headshots?.toDouble() ?: 0.0) / (it.kills?.toDouble() ?: 0.0)
-                } catch (e: Exception) {
-                    0.0
-                }
-                if (kills > 50) {
-                    if (it.type != "霰彈槍" && it.type != "配備" && it.type != "近戰武器" && it.type != "手榴彈") {
-                        if (acc > 50) {//武器准确率大于50%
-                            loger.warn(
-                                "[{}]{}低等级玩家数据异常,疑似锁腰子 {} 准确率>50%且武器击杀>50",
-                                rank,
-                                _p.NAME,
-                                it.name
-                            )
-                            kick("Low Rank Weapon Anomaly")
-                        }
-                        if (hs > 0.5 && wkpm > 1) {//爆头率>50%且kpm>1且武器击杀>50
-                            loger.warn(
-                                "[{}]{}低等级玩家数据异常,爆头异常 {} 爆头率>50%且kpm>1且武器击杀>50",
-                                rank,
-                                _p.NAME,
-                                it.name
-                            )
-                            kick("Low Rank Weapon Anomaly")
-                        }
-                        if (hs < 0.01) {
-                            loger.warn(
-                                "[{}]{}低等级玩家数据异常,疑似锁腰子 {} 爆头率<1%且武器击杀>50",
-                                rank,
-                                _p.NAME,
-                                it.name
-                            )
-                            kick("Low Rank Weapon Anomaly")
-                        }
-                    }
-                    if (it.type == "霰彈槍") {
-                        if (acc > 100) {//霰弹枪命中率>100%
-                            loger.warn(
-                                "[{}]{}低等级玩家数据异常,喷子命中异常 {} 霰弹枪命中率>100%且武器击杀>50",
-                                rank,
-                                _p.NAME,
-                                it.name
-                            )
-                            kick("Low Rank Weapon Anomaly")
-                        }
-                    }
-                    //效率异常 效率指几颗子弹杀一个人,通常用来鉴别改伤
-                    if (it.type == "輕機槍") {
-                        if (vp < 3) {//3发子弹打死人
-                            loger.warn(
-                                "[{}]{}低等级玩家数据异常,机枪效率异常 {} 3发子弹打死人且武器击杀>50",
-                                rank,
-                                _p.NAME,
-                                it.name
-                            )
-                            kick("Low Rank Weapon Anomaly")
-                        }
-                    }
-                }
-            }
-        }
+        LowRankChecker(info, this, serverSetting).check()
     }
 
     private suspend fun kickAlwaysByClassRank() {
-        if (isExit) return
         if (serverSetting.get().classRankLimited.all { it.value > 50 }) return
         if (baseInfo == null) {
             delay(5000)
@@ -343,7 +257,6 @@ class Player(
     }
 
     private suspend fun kickByPlatoons() {
-        if (isExit) return
         if (serverSetting.get().platoonLimited.isEmpty()) return
         if (baseInfo == null) {
             delay(5000)
@@ -357,44 +270,61 @@ class Player(
     fun update(p: PLBy22.ROST) {
         _p = p
         coroutineScope.launch {
-            kickByLan()
-        }
-        if (isKick) {
-            if (kickTimes < 15) {
-                kick(kickRes, kicKCD)
-            } else {
-                loger.error("连续在服务器{}踢出玩家{}失败,已禁用踢出该玩家", serverSetting.get().gameId, _p.NAME)
-                isKick = false
+            if (kickRes.isNotEmpty()) {
+                kick(kickRes, KickCD ?: serverSetting.get().kickCD)
             }
-            kickTimes++
         }
         //serverSetting = setting
     }
 
     fun exit() {
-        loger.info("玩家{}离开服务器{}", _p.NAME, serverSetting.get().gameId)
-        if (serverSetting.get().reEnterKick && nextEnterTime != 0L)
+        loger.info("玩家 {} 离开服务器 {} ", _p.NAME, serverSetting.get().gameId)
+        if (whitelist()) return
+        if (serverSetting.get().killsMax > 0) {
+            coroutineScope.launch {
+                delay(3 * 60 * 1000)
+                val btrMatches = BtrApi.recentlyServerSearch(_p.NAME, pid.toString(), 1.0)
+                btrMatches.firstOrNull()?.let {
+                    var kills = serverSetting.get().killsMap[pid.toString()] ?: 0
+                    kills += (it.stats?.kills?.value?.toInt() ?: 0) + (it.stats?.killsAssistAsKills?.value?.toInt() ?:0)
+                    if (kills > 0) serverSetting.get().killsMap[pid.toString()] = kills
+                }
+            }
+        }
+        if (serverSetting.get().reEnterKick)
             nextEnterTime = System.currentTimeMillis() + 60 * 1000
-        isExit = true
     }
-
-    fun kick(reason: String = "Kick Without Reason", kickCD: Int = serverSetting.get().kickCD) {
-        if (serverSetting.get().whitelist.any { wl -> wl == _p.NAME }) return
-        if (serverSetting.get().adminlist.any { wl -> wl == _p.PID.toString() }) return
-        isKick = true
+    fun whitelist():Boolean{
+        if (serverSetting.get().whitelist.any { wl -> wl == _p.NAME }) return true
+        if (serverSetting.get().adminlist.any { wl -> wl == _p.PID.toString() }) return true
+        if (serverSetting.get().botlist.any { wl -> wl == _p.PID.toString() }) return true
+        if (config.Config.Config.botlist.any { wl -> wl == _p.NAME }) return true
+        return false
+    }
+    fun kick(reason: String = "Kick Without Reason", kickCD: Int = serverSetting.get().kickCD, times: Int = 0) {
+        if (whitelist()) return
         kickRes = reason
+        KickCD = kickCD
         val kickPlayer = GatewayApi.kickPlayer(sessionId, serverSetting.get().gameId.toString(), pid.toString(), reason)
         if (kickPlayer.reqBody.contains("Error", true)) {
             loger.error(
-                "在服务器{}踢出玩家{}失败,理由:{}",
+                "在服务器 {} 踢出玩家 {} 失败,理由: {} ",
                 serverSetting.get().gameId.toString(),
                 _p.NAME,
                 reason.toTradition()
             )
+            if (times < 5)
+                kick(reason, kickCD, times + 1)
+            else
+                loger.error("多次踢出玩家无效,已禁止重复踢出该玩家  {} ", _p.NAME)
         } else {
-            loger.info("在服务器{}踢出玩家{}成功,理由:{}", serverSetting.get().gameId.toString(), _p.NAME, reason)
+            loger.info(
+                "在服务器 {} 踢出玩家 {} 成功,理由: {} ",
+                serverSetting.get().gameId.toString(),
+                _p.NAME,
+                reason.toTradition()
+            )
             if (kickCD > 0) {
-                kicKCD = kickCD
                 nextEnterTime = System.currentTimeMillis() + (kickCD * 60 * 1000)
             }
         }

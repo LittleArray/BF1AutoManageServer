@@ -14,6 +14,8 @@ import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import java.text.SimpleDateFormat
+
 /**
  * @Description
  * @Author littleArray
@@ -62,38 +64,55 @@ object BtrApi {
         taskQueue.receive().invoke()
     }
 
-    fun recentlyServerSearch(eaid: String,count:Int,times:Int= 0): MutableSet<BtrMatch>? {
+    fun recentlyServerSearch(eaid: String, pid: String, count: Double,times:Int = 0): MutableSet<BtrMatch.Data.Segment> {
+        var data: MutableSet<BtrMatch.Data.Segment> = mutableSetOf()
         val matches = build("https://api.tracker.gg/api/v2/bf1/standard/matches/origin/${eaid}")
         //println(matches.reqBody.replace("\n","").substring(0,26))
-        if (!matches.isSuccessful) return null
+        if (!matches.isSuccessful) return data
+        if (matches.reqBody.isEmpty()) return data
         val btrMatches = try {
             Gson().fromJson(matches.reqBody, BtrMatches::class.java)
         } catch (e: Exception) {
             loger.error("btr请求失败,{}", matches.reqBody)
-            return null
+            return data
         }
-        var data: MutableSet<BtrMatch> ?= mutableSetOf()
+        var index = 0
         run p@{
-            btrMatches.data.matches.forEachIndexed { index, it ->
-                if (index + 1 > count) return@p
+            btrMatches.data.matches.forEach {
+                if (index > count) return@p
                 //val btrMatch = Cache.btrMatches[it.attributes.id] ?: Gson().fromJson(build("https://api.tracker.gg/api/v2/bf1/standard/matches/${it.attributes.id}").reqBody, BtrMatch::class.java)
-                val btrMatch = Gson().fromJson(build("${Config.Config.serverUrl}/btr/getMatch/${it.attributes.id}").reqBody, BtrMatch::class.java)
-                if (btrMatch != null){
-                    data?.add(btrMatch)
+                val btrMatch = try {
+                    Gson().fromJson(
+                        build("${Config.Config.serverUrl}/btr/getMatch/${it.attributes.id}").reqBody,
+                        BtrMatch::class.java
+                    )
+                } catch (e: Exception) {
+                    return@p
+                }
+                if (btrMatch != null) {
+                    run {
+                        if (btrMatch.data != null)
+                            btrMatch.data.segments?.forEach {
+                                if (it != null)
+                                    if (it.attributes?.playerId == pid && it.type == "player") {
+                                        val ntime = it.stats?.time?.value?.div(60) ?: 0.0
+                                        val nkills = (it.stats?.kills?.value?.toInt() ?: 0) + (it.stats?.killsAssistAsKills?.value?.toInt() ?:0)
+                                        if (ntime > 5 && nkills > 0) {
+                                            data.add(it)
+                                            index++
+                                        }
+                                        return@run
+                                    }
+                            }
+                    }
                 }
                 runBlocking {
                     delay(1000)
                 }
             }
         }
-        return if (data?.size == 0 && times < 5){
-            data = null
-            runBlocking {
-                delay(5000)
-            }
-            recentlyServerSearch(eaid, count,times + 1)
-        }else{
-            data
-        }
+        if (data.isEmpty() && times < 5)
+            data = recentlyServerSearch(eaid, pid, count,times+1)
+        return data
     }
 }

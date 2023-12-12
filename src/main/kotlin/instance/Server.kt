@@ -3,23 +3,18 @@ package instance
 import api.*
 import com.charleskorn.kaml.Yaml
 import com.charleskorn.kaml.YamlComment
-import com.google.gson.Gson
-import command.Command
 import data.PostResponse
 import data.Result
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.InheritableSerialInfo
-import kotlinx.serialization.SerialInfo
-import kotlinx.serialization.SerialName
+import kotlinx.coroutines.*
 import kotlinx.serialization.Serializable
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import utils.ChineseTR.toSimplified
 import utils.DataUtils
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.math.abs
+import kotlin.math.absoluteValue
 
 /**
  * @Description
@@ -87,10 +82,43 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         "MP_Alps" to Pair("大英帝國", "德意志帝國"),
     )
     private val loger: Logger = LoggerFactory.getLogger(this.javaClass)
-    var playerList = mutableListOf<Player>()
+    var playerList = CopyOnWriteArrayList<Player>()
     var soldier = 0
+        set(value) {
+            if ((field - value).absoluteValue > 2)
+                loger.info("{} 士兵数量变更 {} -> {}", serverSetting.gameId, field, value)
+            field = value
+        }
     var spectator = 0
+        set(value) {
+            if (field != value)
+                loger.info("{} 观战数量变更 {} -> {}", serverSetting.gameId, field, value)
+            field = value
+        }
     var queue = 0
+        set(value) {
+            if (field != value)
+                loger.info("{} 加载数量变更 {} -> {}", serverSetting.gameId, field, value)
+            field = value
+        }
+    var bots = 0
+        set(value) {
+            if (field != value)
+                loger.info("{} 机器人数量变更 {} -> {}", serverSetting.gameId, field, value)
+            field = value
+        }
+    var cdPlayer = 0
+        set(value) {
+            if (field != value)
+                loger.info("{} 踢出CD数量变更 {} -> {}", serverSetting.gameId, field, value)
+            field = value
+        }
+    var progress = "0"
+        set(value) {
+            if (field != value)
+                loger.info("{} 踢出CD数量变更 {} -> {}", serverSetting.gameId, field, value)
+            field = value
+        }
     var loaderr = false
     var mapName = ""
         set(value) {
@@ -103,7 +131,7 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         set(value) {
             val old = field
             if (old != value) {
-                loger.info("服务器{}地图变更:{}", serverSetting.gameId, value)
+                loger.info("{} 地图变更 {} -> {}", serverSetting.gameId, field, value)
                 playerList.forEach {
                     it.isChangeMap = true
                     it.map = mapName
@@ -111,47 +139,60 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
             }
             field = value
         }
+
     @Serializable
     data class ServerSetting(
         @YamlComment("服务器RSPID")
         var rspId: Long = 0,
         @YamlComment("仅使用BFEAC踢挂")
-        var onlyBFEAC : Boolean = false,
-        @YamlComment("对接接口的Token(未开放)")
+        var onlyBFEAC: Boolean = false,
+        @YamlComment("对接接口的Token")
         var token: String = UUID.randomUUID().toString(),
         @YamlComment("服务器GameID")
         var gameId: Long = 0,
+        @YamlComment("使用全局管服号")
+        var opName: String = "",
         @YamlComment("管服账号的sessionID")
         var sessionID: String = "",
         @YamlComment("管服账号的sid")
         var sid: String = "",
         @YamlComment("管服账号的remid")
         var remid: String = "",
-        @YamlComment("以下数据任意一个超过5.0的都不做判断","服务器内玩家最高生涯KD")
+        @YamlComment("以下数据任意一个超过5.0的都不做判断", "服务器内玩家最高生涯KD")
         var lifeMaxKD: Double = 5.1,
         @YamlComment("服务器内玩家最高生涯KPM")
         var lifeMaxKPM: Double = 5.1,
         @YamlComment("服务器内玩家最高最近KPM")
         var recMaxKPM: Double = 5.1,
-        @YamlComment("服务器内玩家最高最近KD","最近限制数据来自Btr,该功能是给noob服设计的,当然其他服也能用,一般情况下限制设置的比生涯限制高一点就行")
+        @YamlComment(
+            "服务器内玩家最高最近KD",
+            "最近限制数据来自Btr,该功能是给noob服设计的,当然其他服也能用,一般情况下限制设置的比生涯限制高一点就行"
+        )
         var recMaxKD: Double = 5.1,
-        @YamlComment("在超过此游玩时长(单位:分钟)的对局中计算最近数据","超过30不做判断")
+        @YamlComment("在超过此游玩时长(单位:分钟)的对局中计算最近数据", "超过30不做判断", "已弃用")
         var recPlayTime: Double = 31.0,
         @YamlComment("最近数据超过这个击杀数后忽略游玩时长并计算最近数据")
         var matchKillsEnable: Int = 999,
-        @YamlComment("计算最近对局的数量","数量越多踢得人越多,但是更能防止捞逼")
-        var recCount: Int = 3,
+        @YamlComment("计算最近对局有效数量")
+        var recCount: Double = 3.0,
+        @YamlComment("服内最多计算数,0不做限制")
+        var killsMax: Int = 0,
         @YamlComment("踢出CD")
         var kickCD: Int = 0,
         @YamlComment("踢出高延迟,0为不限制")
         var maxPing: Int = 0,
         @YamlComment("如果超过这个数量的实体Ban则踢出")
         var tooManyBan: Int = 3,
-        @YamlComment("启用低等级严管","游戏时长小与30h的都会触发低等级管理机制","如果误触发请加本工具的白名单","默认启用")
+        @YamlComment(
+            "启用低等级严管",
+            "游戏时长小与30h的都会触发低等级管理机制",
+            "如果误触发请加本工具的白名单",
+            "默认启用"
+        )
         var lowRankMan: Boolean = true,
-        @YamlComment("胜率限制,0.0-1.0(小数非百分比)","超过1不做判断")
+        @YamlComment("胜率限制,0.0-1.0(小数非百分比)", "超过1不做判断")
         var winPercentLimited: Double = 1.1,
-        @YamlComment("等级限制","超过150不做判断")
+        @YamlComment("等级限制", "超过150不做判断")
         var rankLimited: Int = 151,
         @YamlComment("禁止快速重进服务器,默认关闭")
         var reEnterKick: Boolean = false,
@@ -159,11 +200,11 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         var spectatorKick: Boolean = false,
         @YamlComment("对应兵种等级限制,默认不限制")
         var classRankLimited: MutableMap<String, Int> = mutableMapOf(
-            Pair("assault",51),
-            Pair("cavalry",51),
-            Pair("medic",51),
-            Pair("pilot",51),
-            Pair("tanker",51),
+            Pair("assault", 51),
+            Pair("cavalry", 51),
+            Pair("medic", 51),
+            Pair("pilot", 51),
+            Pair("tanker", 51),
         ),
         @YamlComment("战队限制,请填入战队完整名称,不是缩写")
         var platoonLimited: MutableList<String> = mutableListOf(),
@@ -174,7 +215,9 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         @YamlComment("VBan")
         var vbanlist: MutableList<String> = mutableListOf(),
         @YamlComment("管理员PID列表,不用管")
-        var adminlist: MutableList<String> = mutableListOf()
+        var adminlist: MutableList<String> = mutableListOf(),
+        @YamlComment("历史击杀列表")
+        var killsMap: MutableMap<String, Int> = mutableMapOf()
     ) {
         /*override fun toString(): String {
             return "$gameId $lifeMaxKD $lifeMaxKPM $winPercentLimited $classRankLimited"
@@ -182,25 +225,33 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
     }
 
     fun saveServer() {
-        val serializer = ServerSetting.serializer()
         if (loaderr) return
         try {
-            DataUtils.save("ServerSetting_${serverSetting.gameId}", Yaml.default.encodeToString(ServerSetting.serializer(),serverSetting))
-            loger.info("服务器{}数据保存成功", serverSetting.gameId)
+            DataUtils.save(
+                "ServerSetting_${serverSetting.gameId}",
+                Yaml.default.encodeToString(ServerSetting.serializer(), serverSetting)
+            )
+            loger.info("服务器 {} 数据保存成功", serverSetting.gameId)
         } catch (e: Exception) {
-            loger.info("服务器{}数据保存失败 {}", serverSetting.gameId, e.stackTraceToString())
+            loger.info("服务器 {} 数据保存失败  {} ", serverSetting.gameId, e.stackTraceToString())
         }
     }
 
     fun loadServer() {
         try {
-            serverSetting = Yaml.default.decodeFromString(ServerSetting.serializer(),DataUtils.load("ServerSetting_${serverSetting.gameId}"))
-            loger.info("服务器{}数据载入成功", serverSetting.gameId)
-            loger.info("服务器配置:{}", serverSetting.toString())
+            serverSetting = Yaml.default.decodeFromString(
+                ServerSetting.serializer(),
+                DataUtils.load("ServerSetting_${serverSetting.gameId}")
+            )
+            loger.info("服务器 {} 数据载入成功", serverSetting.gameId)
+            //loger.info("服务器配置: {} ", serverSetting.toString())
         } catch (e: Exception) {
-            loger.info("服务器{}数据载入失败 {}", serverSetting.gameId, e.stackTraceToString())
+            loger.info("服务器 {} 数据载入失败  {} ", serverSetting.gameId, e.stackTraceToString())
             loaderr = true
-            DataUtils.save("ServerSetting_${serverSetting.gameId}.back", DataUtils.load("ServerSetting_${serverSetting.gameId}"))
+            DataUtils.save(
+                "ServerSetting_${serverSetting.gameId}.back",
+                DataUtils.load("ServerSetting_${serverSetting.gameId}")
+            )
         }
     }
 
@@ -213,20 +264,28 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         if (serverSetting.gameId == 0L) return
         val list = PlayerListApi.getPlayerListBy22(serverSetting.gameId)
         if (!list.isSuccessful) return
+        if (serverSetting.opName.isNotEmpty()) {
+            config.Config.Config.oplist.forEach {
+                run {
+                    if (it.name == serverSetting.opName) {
+                        serverSetting.sessionID = it.sessionID
+                        loger.info(" {} 使用全局管服号 {} ", serverSetting.gameId, serverSetting.opName)
+                        return@run
+                    }
+                }
+            }
+        }
         mapName = list.GDAT?.firstOrNull()?.ATTR?.level ?: ""
-        val admin = (list.GDAT?.firstOrNull()?.ATTR?.admins1?:"") +
-                (list.GDAT?.firstOrNull()?.ATTR?.admins2?:"") +
-                (list.GDAT?.firstOrNull()?.ATTR?.admins3?:"") +
-                (list.GDAT?.firstOrNull()?.ATTR?.admins4?:"")
+        val admin = (list.GDAT?.firstOrNull()?.ATTR?.admins1 ?: "") +
+                (list.GDAT?.firstOrNull()?.ATTR?.admins2 ?: "") +
+                (list.GDAT?.firstOrNull()?.ATTR?.admins3 ?: "") +
+                (list.GDAT?.firstOrNull()?.ATTR?.admins4 ?: "")
         serverSetting.adminlist = admin.split(";").toMutableList()
-        val oldSoldier = soldier
-        val oldQueue = queue
-        val oldSpectator = spectator
-        soldier = 0
-        queue = 0
-        spectator = 0
-        var bots = 0
-        var cdPlayer = 0
+        var nsoldier = 0
+        var nqueue = 0
+        var nspectator = 0
+        var nbots = 0
+        progress = list.GDAT?.firstOrNull()?.ATTR?.progress ?: "0"
         val multiCheck = BFEACApi.MultiCheckPostJson()
         //玩家数量
         list.GDAT?.firstOrNull()?.ROST?.forEach { p ->
@@ -243,14 +302,14 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
             //离开玩家
             playerList.removeIf {
                 if (list.GDAT[0].ROST.none { e -> e.PID == it.pid }) {
-                    if(it.nextEnterTime > 0){//如果存在cd
-                        if (System.currentTimeMillis() > it.nextEnterTime){//如果超时
+                    if (it.nextEnterTime > 0) {//如果存在cd
+                        if (System.currentTimeMillis() > it.nextEnterTime) {//如果超时
                             it.exit()
                             true
-                        }else{
+                        } else {
                             false
                         }
-                    }else{
+                    } else {
                         it.exit()
                         true
                     }
@@ -259,110 +318,152 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
                 }
             }
             //机器人
-            if (serverSetting.botlist.any { it == p.NAME }) bots++
+            if (serverSetting.botlist.any { it == p.NAME } || config.Config.Config.botlist.any { it == p.NAME }) nbots++
             //真实玩家
-            if (p.ROLE != "" && p.TIDX.toInt() != 65535) soldier++
+            if (p.ROLE != "" && p.TIDX.toInt() != 65535) nsoldier++
             //加载中玩家
-            if (p.TIDX.toInt() != 0 && p.TIDX.toInt() != 1) queue++
+            if (p.TIDX.toInt() != 0 && p.TIDX.toInt() != 1) nqueue++
             //观战玩家
-            if (p.ROLE == "") spectator++
+            if (p.ROLE == "") nspectator++
             //新玩家
             if (playerList.none { it.pid == p.PID }) {
                 val newPlayer = Player(serverSetting.sessionID, p, this::serverSetting)
                 playerList.add(newPlayer)
             }
-            //老玩家
+        }
+        soldier = nsoldier
+        queue = nqueue
+        bots = nbots
+        spectator = nspectator
+        //老玩家
+        run o@{
             playerList.forEach {
-                if (it.pid == p.PID) {
-                    it.update(p)
+                list.GDAT?.firstOrNull()?.ROST?.forEach { p ->
+                    if (it.pid == p.PID) {
+                        it.update(p)
+                        return@o
+                    }
                 }
             }
         }
+        var ncdPlayer = 0
         playerList.forEach {
-            if (it.nextEnterTime > 0) cdPlayer++
+            if (it.nextEnterTime > 0) ncdPlayer++
         }
-        if (oldSoldier != soldier || oldQueue != queue || oldSpectator != spectator){
-            if (list.GDAT?.firstOrNull()?.ROST == null || list.GDAT.firstOrNull()?.ROST?.isEmpty() == true) {
-                playerList = mutableListOf()
-                loger.warn("服务器{}内玩家已清空", serverSetting.gameId)
-            }
-            loger.info(
-                "服务器{}玩家数量更新 玩家:{} 观战:{} 加载:{} 机器人:{} 踢出CD玩家:{} 总数:{} 进度:{}",
-                serverSetting.gameId,
-                soldier,
-                spectator,
-                queue,
-                bots,
-                cdPlayer,
-                playerList.size,
-                list.GDAT?.firstOrNull()?.ATTR?.progress
-            )
-        }
+        cdPlayer = ncdPlayer
         if (multiCheck.pids.isEmpty()) return
         val multiCheckResponse = BFEACApi.multiCheck(multiCheck)
         multiCheckResponse.data.forEach { c ->
             playerList.forEach {
-                if (it.pid == c) it.kick("Ban By BFEAC.COM")
+                if (it.pid == c) {
+                    it.kick("Ban By BFEAC.COM")
+                }
             }
         }
     }
+
+    /**
+     * 基于最近数据的队伍平衡(测试
+     */
+    fun balanceTeams() {
+        loger.info("服务器  {}  开始平衡", serverSetting.gameId)
+        // 将玩家按照KPM进行排序
+
+        val team1 = playerList.filter { it._p.TIDX == 0L && it.rkd != null && it.rkp != null && serverSetting.botlist.none { wl -> wl == it._p.NAME } && config.Config.Config.botlist.none { wl -> wl == it._p.NAME } }.sortedByDescending { (it.rkp?:0.0) + (it.rkd?:0.0)}.toMutableList()
+        val team2 = playerList.filter { it._p.TIDX == 1L && it.rkd != null && it.rkp != null && serverSetting.botlist.none { wl -> wl == it._p.NAME } && config.Config.Config.botlist.none { wl -> wl == it._p.NAME } }.sortedByDescending { (it.rkp?:0.0) + (it.rkd?:0.0)}.toMutableList()
+        loger.info("队伍1有效数据量  {}  队伍2有效数据量  {} ", team1.size, team2.size)
+        team1.forEach {
+            loger.info(
+                "队伍1 玩家  {}  RKD: {}  RKP: {} ",
+                it._p.NAME,
+                String.format("%.2f", it.rkd),
+                String.format("%.2f", it.rkp)
+            )
+        }
+        team2.forEach {
+            loger.info(
+                "队伍2 玩家  {}  RKD: {}  RKP: {} ",
+                it._p.NAME,
+                String.format("%.2f", it.rkd),
+                String.format("%.2f", it.rkp)
+            )
+        }
+        if (abs(team1.size - team2.size) > 7) {
+            loger.info("队伍人数不平衡")
+        }
+    }
+
     fun getRSPInfo(): Result? {
         val rspInfo = GatewayApi.getFullServerDetails(serverSetting.sessionID, serverSetting.gameId.toString()).result
-        serverSetting.rspId = rspInfo?.rspInfo?.server?.serverId?.toLong()?:0L
+        serverSetting.rspId = rspInfo?.rspInfo?.server?.serverId?.toLong() ?: 0L
         return rspInfo
     }
-    fun chooseMap(index:Int): String? {
+
+    fun movePlayer(pid: Long, teamID: Int): PostResponse {
+        return GatewayApi.movePlayer(serverSetting.sessionID, serverSetting.gameId.toString(), pid, teamID)
+    }
+
+    fun chooseMap(index: Int): String {
         val result = getRSPInfo()
-        return if (GatewayApi.chooseServerMap(serverSetting.sessionID, result?.rspInfo?.server?.persistedGameId ?: "", index.toString()).isSuccessful) {
-            result?.serverInfo?.rotation?.get(index)?.mapPrettyName
-        }else{
-            null
+        val chooseServerMap = GatewayApi.chooseServerMap(
+            serverSetting.sessionID,
+            result?.rspInfo?.server?.persistedGameId ?: "",
+            index.toString()
+        )
+        return if (chooseServerMap.isSuccessful) {
+            result?.serverInfo?.rotation?.get(index)?.mapPrettyName?:"图池中不存在该地图"
+        } else {
+            chooseServerMap.error
         }
     }
-    fun getMap():List<String>{
+
+    fun getMap(): List<String>? {
         val result = getRSPInfo()
-        val list = mutableListOf<String>()
-        result?.serverInfo?.rotation?.forEach {
-            list.add(it.mapPrettyName.toSimplified())
-        }
-        return list
+        return result?.serverInfo?.rotation?.map { it.mapPrettyName }
     }
-    fun addVip(id:String): Boolean {
+
+    fun addVip(id: String): Boolean {
         val result = getRSPInfo()
         val vip = GatewayApi.addServerVIP(serverSetting.sessionID, result?.rspInfo?.server?.serverId?.toInt() ?: 0, id)
-        if (vip.isSuccessful) loger.info("添加vip成功 {} {}",id,serverSetting.gameId)
+        if (vip.isSuccessful) loger.info("添加vip成功  {}   {} ", id, serverSetting.gameId)
         return vip.isSuccessful
     }
-    fun removeVip(pid:String): Boolean {
+
+    fun removeVip(pid: String): Boolean {
         val result = getRSPInfo()
-        val vip = GatewayApi.removeServerVIP(serverSetting.sessionID, result?.rspInfo?.server?.serverId?.toInt() ?: 0, pid)
-        if (vip.isSuccessful) loger.info("移除vip成功 {} {}",pid,serverSetting.gameId)
+        val vip =
+            GatewayApi.removeServerVIP(serverSetting.sessionID, result?.rspInfo?.server?.serverId?.toInt() ?: 0, pid)
+        if (vip.isSuccessful) loger.info("移除vip成功  {}   {} ", pid, serverSetting.gameId)
         return vip.isSuccessful
     }
-    fun addBan(id:String): Boolean {
+
+    fun addBan(id: String): Boolean {
         val rspInfo = getRSPInfo()
         val ban = GatewayApi.addServerBan(
             serverSetting.sessionID,
             rspInfo?.rspInfo?.server?.serverId?.toInt() ?: 0,
             id
         )
-        if (ban.isSuccessful) loger.info("{}封禁成功", id)
+        if (ban.isSuccessful) loger.info(" {} 封禁成功", id)
         return ban.isSuccessful
     }
-    fun removeBan(pid: String):Boolean{
+
+    fun removeBan(pid: String): Boolean {
         val rspInfo = getRSPInfo()
         val ban = GatewayApi.removeServerBan(
             serverSetting.sessionID,
             rspInfo?.rspInfo?.server?.serverId?.toInt() ?: 0,
             pid
         )
-        if (ban.isSuccessful) loger.info("{}解禁成功", pid)
+        if (ban.isSuccessful) loger.info(" {} 解禁成功", pid)
         return ban.isSuccessful
     }
+
     fun addVBan(id: String): Boolean {
         return serverSetting.vbanlist.add(id)
     }
-    fun removeVban(id: String):Boolean{
+
+    fun removeVban(id: String): Boolean {
         return serverSetting.vbanlist.remove(id)
     }
 }

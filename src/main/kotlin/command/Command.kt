@@ -100,7 +100,7 @@ object Command {
             }
             "list" -> {
                 ServerInstance.INSTANCE.forEach {
-                    loger.info("服务器{}", it.serverSetting.gameId)
+                    loger.info("服务器 {} ", it.serverSetting.gameId)
                 }
             }
             "ss" -> {
@@ -193,7 +193,7 @@ object Command {
                                 if (b.user != null)
                                     it.serverSetting.botlist.add(b.user)
                             }
-                            loger.info("机器人数据导入成功{}", gameID)
+                            loger.info("机器人数据导入成功 {} ", gameID)
                         }
                     }
                 }
@@ -218,7 +218,7 @@ object Command {
                 ServerInstance.INSTANCE.forEach {
                     if (it.serverSetting.gameId == gameID) {
                         val map = it.chooseMap(index)
-                        loger.info("{}切图成功:{}", gameID, map)
+                        loger.info(" {} 切图成功: {} ", gameID, map)
                     }
                 }
 
@@ -233,9 +233,9 @@ object Command {
                 ServerInstance.INSTANCE.forEach {
                     if (it.serverSetting.gameId == gameID) {
                         val result = it.getRSPInfo()
-                        loger.info("{}地图池:", gameID)
+                        loger.info(" {} 地图池:", gameID)
                         result?.serverInfo?.rotation?.forEachIndexed { index, it ->
-                            loger.info("{}-{} {}", it.mapPrettyName, it.modePrettyName, index)
+                            loger.info(" {} - {}   {} ", it.mapPrettyName, it.modePrettyName, index)
                         }
                     }
                 }
@@ -277,7 +277,7 @@ object Command {
                 } else {
                     loger.info("多个或没有找到对应玩家")
                     list.forEach {
-                        loger.info("{}", it._p.NAME)
+                        loger.info(" {} ", it._p.NAME)
                     }
                 }
             }
@@ -291,10 +291,10 @@ object Command {
                         split.getOrNull(2) ?: "Rule Violation"
                     )
                     if (kick.isSuccessful) loger.info(
-                        "在服务器{}踢出{}成功",
+                        "在服务器 {} 踢出 {} 成功",
                         it.serverSetting.gameId,
                         pid
-                    ) else loger.error("在服务器{}踢出{}失败", it.serverSetting.gameId, pid)
+                    ) else loger.error("在服务器 {} 踢出 {} 失败", it.serverSetting.gameId, pid)
                 }
             }
             "b" -> {
@@ -325,12 +325,17 @@ object Command {
                 Config.saveConfig()
                 exitProcess(0)
             }
+            "bal" ->{
+                ServerInstance.INSTANCE.forEach {
+                    it.balanceTeams()
+                }
+            }
             "ls" -> {
                 ServerInstance.INSTANCE.forEach {
                     val rspInfo = it.getRSPInfo()
-                    loger.info("服务器{} {}", it.serverSetting.gameId, rspInfo?.serverInfo?.name)
+                    loger.info("服务器 {}   {} ", it.serverSetting.gameId, rspInfo?.serverInfo?.name)
                     loger.info(
-                        "地图模式:{}-{} 收藏数:{} {}/{}[{}]({})",
+                        "地图模式: {} - {}  收藏数: {}   {} / {} [ {} ]( {} )",
                         rspInfo?.serverInfo?.mapNamePretty,
                         rspInfo?.serverInfo?.mapModePretty,
                         rspInfo?.serverInfo?.serverBookmarkCount,
@@ -341,13 +346,14 @@ object Command {
                     )
                     it.playerList.forEach {
                         loger.info(
-                            "[{}] {} LKD:{} LKP:{} RKD:{} RKP:{} 队伍:{} 语言地区:{} {}ms",
+                            "[ {} ]  {}  LKD: {}  LKP: {}  平均RKD: {}  平均RKP: {}  平均时长: {}  队伍: {}  语言地区: {}   {} ms",
                             it._p.PATT?.rank,
                             it._p.NAME,
                             it.lkd,
                             it.lkp,
-                            it.rkd,
-                            it.rkp,
+                            String.format("%.2f",it.rkd),
+                            String.format("%.2f",it.rkp),
+                            String.format("%.2f",it.rtime),
                             it._p.TEAMNAME,
                             it._p.LOC.toString(16).chunked(2).map { it.toInt(16).toByte() }.toByteArray()
                                 .toString(Charsets.US_ASCII),
@@ -357,10 +363,10 @@ object Command {
                 }
             }
             "btro" ->{
-                loger.info("btr队列:{}",BtrApi.taskQueue)
+                loger.info("btr队列: {} ",BtrApi.taskQueue)
             }
             "jso" ->{
-                loger.info("JsonRpc队列:{}",GatewayApi.taskQueue)
+                loger.info("JsonRpc队列: {} ",GatewayApi.taskQueue)
             }
             else -> loger.info("无效命令")
         }

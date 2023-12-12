@@ -10,5 +10,17 @@ data class SettingConfig (
     @YamlComment("网路本地代理","为空不启用")
     var proxies: String = "",
     @YamlComment("网路代理端口","不用代理别动,没有判空处理")
-    var port: Int = 7890
-)
+    var port: Int = 7890,
+    @YamlComment("全局机器人白名单")
+    var botlist: MutableList<String> = mutableListOf(),
+    @YamlComment("全局管服号")
+    var oplist: MutableList<Op> = mutableListOf(),
+){
+    @Serializable
+    data class Op(
+        var name:String,
+        var sid:String,
+        var remid:String,
+        var sessionID:String
+    )
+}

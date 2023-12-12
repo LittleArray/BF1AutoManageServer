@@ -1,7 +1,11 @@
 package config
 
+import api.GatewayUtils
 import com.charleskorn.kaml.Yaml
-import instance.Server
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import utils.DataUtils
@@ -36,10 +40,25 @@ object Config {
                 if (Config.proxies.isNotEmpty())
                     sa = InetSocketAddress(Config.proxies, Config.port)
                 loger.info("配置载入成功")
+                updateSessionID()
             }
         } catch (e: Exception) {
             loger.info("配置载入失败 {}", e.stackTraceToString())
             loaderr = true
+        }
+    }
+    fun updateSessionID(){
+        Config.oplist.forEach {
+            CoroutineScope(Dispatchers.IO).launch {
+                while (true){
+                    delay(10 * 60 * 60 * 1000)
+                    try {
+                        it.sessionID = GatewayUtils.getSessionId(it.sid,it.remid)?:it.sessionID
+                    } catch (e: Exception) {
+                        TODO("更新sessionID失败")
+                    }
+                }
+            }
         }
     }
 }

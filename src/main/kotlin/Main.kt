@@ -23,36 +23,13 @@ fun main() {
     ServerInstance.load()
     val serversThread = Thread {
         while (true) {
-            val multiCheck = BFEACApi.MultiCheckPostJson()
             ServerInstance.INSTANCE.forEach {
                 it.updatePlayerList()
-                it.playerList.forEach {
-                    multiCheck.pids.add(it.pid)
-                }
+                Thread.sleep( 800)
             }
-            val multiCheckResponse = BFEACApi.multiCheck(multiCheck)
-            multiCheckResponse.data.forEach { c ->
-                ServerInstance.INSTANCE.forEach {s->
-                    s.playerList.forEach {
-                        if (it.pid == c) {
-                            it.kick("Ban By BFEAC.COM")
-                            CoroutineScope(Dispatchers.IO).launch {
-                                repeat(5){_->
-                                    if (it.baseInfo != null){
-                                        it.baseInfo?.platoons?.forEach {
-                                            it.name?.let { it1 -> s.serverSetting.platoonLimited.add(it1) }
-                                        }
-                                    }else{
-                                        delay(5000)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Thread.sleep(15 * 1000)
+            Thread.sleep( 10*1000)
         }
+
     }
     QQBotApi.init(2086)
     serversThread.name = "ServersThread"
@@ -65,6 +42,10 @@ fun main() {
     """.trimIndent())
     val scanner = Scanner(System.`in`)
     while (true) {
-        cmd = scanner.nextLine()
+        try {
+            cmd = scanner.nextLine()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }

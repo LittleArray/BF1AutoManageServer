@@ -72,6 +72,7 @@ data class BtrMatch(
                 val kdRatio: KdRatio? = null,
                 val kills: Kills? = null,
                 val killsPerMinute: KillsPerMinute? = null,
+                val killsAssistAsKills: KillsAssistAsKills? = null,
                 val lmgsScore: LmgsScore? = null,
                 val medicScore: MedicScore? = null,
                 val operationsScore: OperationsScore? = null,
@@ -278,6 +279,20 @@ data class BtrMatch(
                 }
 
                 data class KillsPerMinute(
+                    val category: Any? = null,
+                    val description: Any? = null,
+                    val displayCategory: Any? = null,
+                    val displayName: String? = null,
+                    val displayType: String? = null,
+                    val displayValue: String? = null,
+                    val metadata: Metadata? = null,
+                    val percentile: Any? = null,
+                    val rank: Any? = null,
+                    val value: Double? = null
+                ) {
+                    class Metadata
+                }
+                data class KillsAssistAsKills(
                     val category: Any? = null,
                     val description: Any? = null,
                     val displayCategory: Any? = null,
