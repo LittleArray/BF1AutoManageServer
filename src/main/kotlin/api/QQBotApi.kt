@@ -6,7 +6,6 @@ import io.javalin.Javalin
 import io.javalin.http.Context
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import utils.ChineseTR.toSimplified
 import utils.ChineseTR.toTradition
 
 /**
@@ -48,12 +47,14 @@ object QQBotApi {
             return
         }
         val param = Param(gameid, token,ctx.pathParam("param").split(","))
-        loger.info("接收到来自QQ群的管服请求:{} 操作人:{} 操作token:{}",qqGroup,qqID,token)
+        if(qqID != "10086")
+            loger.info("接收到来自QQ群的管服请求:{} 操作人:{} 操作token:{}",qqGroup,qqID,token)
         when (method) {
             "awl" -> awl(ctx,param)
             "rwl" -> awl(ctx,param)
             "kick" -> kick(ctx, param)
             "obscureKick" -> obscureKick(ctx, param)
+            "obscureMove" -> obscureMove(ctx, param)
             "boom" -> boom(ctx, param)
             "ban" -> ban(ctx, param)
             "rban" -> rban(ctx, param)
@@ -62,6 +63,7 @@ object QQBotApi {
             "aVip" -> aVip(ctx, param)
             "rVip" -> rVip(ctx, param)
             "getMaps" -> getMaps(ctx, param)
+            "getLRClogs" -> getLRClogs(ctx, param)
             "chooseMap" -> chooseMap(ctx, param)
             else -> {
                 ctx.result("无效的方法名")
@@ -107,7 +109,7 @@ object QQBotApi {
             return
         }
         val kickID = param.param[0]
-        val reason = param.param.getOrNull(1) ?: "Kick Without Reason"
+        val reason = param.param.getOrNull(1) ?: "RULEVIOLATION"
         val kickCD = try {
             param.param.getOrNull(2)?.toInt() ?: 0
         } catch (e: Exception) {
@@ -138,7 +140,7 @@ object QQBotApi {
             return
         }
         val kickID = param.param[0]
-        val reason = param.param.getOrNull(1) ?: "Kick Without Reason"
+        val reason = param.param.getOrNull(1) ?: "RULEVIOLATION"
         val kickCD = try {
             param.param.getOrNull(2)?.toInt() ?: 0
         } catch (e: Exception) {
@@ -165,6 +167,41 @@ object QQBotApi {
                 }
                 else ->{
                     ctx.result("包含多个玩家 ${kickList.map { it._p.NAME }}")
+                }
+            }
+
+        }
+
+    }
+    private fun obscureMove(ctx: Context, param:Param) {
+        //ID,原因?,cd?
+        if (param.param.isEmpty()) {
+            ctx.result( "参数不足")
+            return
+        }
+        val id = param.param[0]
+        loger.info("申请模糊换边 {} 服务器为 {}", id,param.gameID)
+        val opServer = ServerInstance.getOpServer(param.token, param.gameID)
+        if (opServer == null){
+            ctx.result( "找不到服务器或token无效")
+        }else{
+            val moveList = mutableListOf<Player>()
+            opServer.playerList.forEach {
+                if (it._p.NAME.indexOf(id,0,true) != -1 ){
+                    moveList.add(it)
+                }
+            }
+            when(moveList.size){
+                0 -> {
+                    ctx.result( "找不玩家")
+                }
+                1 -> {
+                    val moveTeam = if (moveList.first()._p.TIDX == 0L) 1 else 0
+                    opServer.movePlayer(moveList.first().pid,moveTeam)
+                    ctx.result( "移动 ${moveList.first()._p.NAME} 成功")
+                }
+                else ->{
+                    ctx.result("包含多个玩家 ${moveList.map { it._p.NAME }}")
                 }
             }
 
@@ -290,6 +327,17 @@ object QQBotApi {
                     val nowMap = opServer.getRSPInfo()?.serverInfo?.mapNamePretty
                 }
             )
+        }else{
+            ctx.result( "找不到服务器或token无效")
+        }
+    }
+    private fun getLRClogs(ctx: Context, param: Param) {
+        //loger.info("获取LRClogs 服务器为 {}",param.gameID)
+        val opServer = ServerInstance.getOpServer(param.token, param.gameID)
+        if (opServer != null){
+            opServer.lrcLog?.let {
+                ctx.json(it)
+            }
         }else{
             ctx.result( "找不到服务器或token无效")
         }

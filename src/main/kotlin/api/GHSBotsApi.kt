@@ -1,7 +1,7 @@
 package api
 
 import api.GatewayApi.okHttpClient
-import config.Config
+import config.GConfig
 import data.PostResponse
 import okhttp3.Request
 import org.slf4j.Logger
@@ -94,8 +94,8 @@ object GHSBotsApi {
             val response = okHttpClient
                 .newBuilder()
                 .apply {
-                    if (Config.sa != null)
-                        proxy(Proxy(Proxy.Type.HTTP, Config.sa))
+                    if (GConfig.sa != null)
+                        proxy(Proxy(Proxy.Type.HTTP, GConfig.sa))
                 }
                 .build()
                 .newCall(request)

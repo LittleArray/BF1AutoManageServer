@@ -1,7 +1,7 @@
 package api
 
 import com.google.gson.Gson
-import config.Config.Config
+import config.GConfig.Config
 import data.*
 import okhttp3.OkHttpClient
 import okhttp3.Request

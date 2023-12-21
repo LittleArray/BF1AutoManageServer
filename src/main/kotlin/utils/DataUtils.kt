@@ -25,6 +25,10 @@ object DataUtils {
         file.createNewFile()
         file.writeText(content)
     }
+    fun del(fileName: String,type:String = ".yaml") {
+        val file = File(currentDir + p + "setting" + p + fileName + type)
+        file.delete()
+    }
 
     fun load(fileName: String,type:String = ".yaml"): String {
         val file = File(currentDir + p + "setting" + p + fileName + type)

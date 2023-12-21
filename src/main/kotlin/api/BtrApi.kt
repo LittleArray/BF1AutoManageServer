@@ -2,7 +2,7 @@ package api
 
 import api.GatewayApi.okHttpClient
 import com.google.gson.Gson
-import config.Config
+import config.GConfig
 import data.BtrMatch
 import data.BtrMatches
 import data.PostResponse
@@ -14,7 +14,6 @@ import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import java.text.SimpleDateFormat
 
 /**
  * @Description
@@ -83,7 +82,7 @@ object BtrApi {
                 //val btrMatch = Cache.btrMatches[it.attributes.id] ?: Gson().fromJson(build("https://api.tracker.gg/api/v2/bf1/standard/matches/${it.attributes.id}").reqBody, BtrMatch::class.java)
                 val btrMatch = try {
                     Gson().fromJson(
-                        build("${Config.Config.serverUrl}/btr/getMatch/${it.attributes.id}").reqBody,
+                        build("${GConfig.Config.serverUrl}/btr/getMatch/${it.attributes.id}").reqBody,
                         BtrMatch::class.java
                     )
                 } catch (e: Exception) {

@@ -1,7 +1,8 @@
 plugins {
-    kotlin("jvm") version "1.8.21"
-    kotlin("kapt") version "1.8.21"
-    kotlin("plugin.serialization") version "1.8.21"
+    val ktVersion = "1.9.0"
+    kotlin("jvm") version ktVersion
+    kotlin("kapt") version ktVersion
+    kotlin("plugin.serialization") version ktVersion
     application
 }
 
@@ -19,7 +20,6 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:1.4.7")
     implementation("ch.qos.logback:logback-core:1.4.7")
     implementation("com.charleskorn.kaml:kaml:0.55.0")
-    implementation("org.jsoup:jsoup:1.16.1")
     implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.11")
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.4.2")

@@ -122,7 +122,7 @@ data class PLBy22(
     data class ROST(
         val ENID: String,
         val EXID: Long,
-        val JGTS: Long,
+        val JGTS: Long?=null,
         val LOC: Long,
         val NAME: String,
         val NASP: String,

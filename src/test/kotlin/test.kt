@@ -18,21 +18,30 @@ import kotlinx.coroutines.channels.Channel
 val taskQueue = Channel<suspend () -> String>(1)
 
 fun main() = runBlocking {
-    launch {
-        taskQueue.send { "Task 1" }
-        taskQueue.send {
-            runBlocking {
-                delay(1000)
-                "Task 2"
-            }
-        }
-        taskQueue.send { "Task 3" }
-    }
-    println(taskQueue.receive().invoke())
-    println(taskQueue.receive().invoke())
-    println(taskQueue.receive().invoke())
+    println(countIL("EvillIIlIlIl"))
 }
+//条形码检测
+//EvillIIlIlIl
+fun countIL(str: String): Int {
+    var count = 0 // 记录连续出现的 "I" 和 "l" 的总次数
+    var index = 0 // 当前遍历的字符索引
 
+    while (index < str.length - 1) { // 注意：遍历索引不能超过倒数第二个字符
+        val currentChar = str[index].toString()
+        val nextChar = str[index + 1].toString()
+        if ((currentChar == "I" || currentChar == "l") && (nextChar == "I" || nextChar == "l")) {
+            count++
+        }else{
+            val spString = str.substring(index + 1)
+            val nextCountIL = countIL(spString)
+            return if (nextCountIL > count) nextCountIL else count
+        }
+
+        index++
+    }
+
+    return count
+}
 @Serializable
 data class Test(
     var rspId: Long = 0,

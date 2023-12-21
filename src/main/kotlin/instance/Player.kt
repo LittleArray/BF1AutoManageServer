@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import utils.ChineseTR.toTradition
+import kotlin.math.abs
 import kotlin.reflect.KMutableProperty0
 
 /**
@@ -30,7 +31,9 @@ class Player(
     var _p: PLBy22.ROST = p
         set(value) {
             val old = field
-            if (old.JGTS != value.JGTS) {//加入时间变更了
+            //loger.debug("Update {} -> {} {} -> {}",old.NAME,value.NAME,old.PID,value.PID)
+
+            if (abs((old.JGTS?:0L) - (value.JGTS?:0L)) > 60000000000 && (value.JGTS?:0) > 10000L && old.JGTS != 0L) {//加入时间变更了
                 loger.info("玩家{}进服时间变更 {} -> {}", value.NAME, old.JGTS, value.JGTS)
                 exit()
                 init()
@@ -48,13 +51,33 @@ class Player(
                     isChangeMap = false
                 }
             }
-            if (old.PATT?.latency != value.PATT?.latency){
-                kickByLan()
+
+            if (serverSetting.get().maxPing != 0)
+                if ((value.PATT?.latency ?: "0").toInt() > serverSetting.get().maxPing)
+                    kick("LATENCY")
+
+            if (kickRes.isNotEmpty()) {
+                kick(kickRes, serverSetting.get().kickCD)
+            }
+
+            if (nextEnterTime > 0) {
+                if (System.currentTimeMillis() < nextEnterTime) {
+                    kick("Wait ${(nextEnterTime - System.currentTimeMillis()) / 1000}sec To Re-enter")
+                } else {
+                    nextEnterTime = 0
+                }
+            }
+            if (serverSetting.get().killsMax > 0) {
+                if ((serverSetting.get().killsMap[pid.toString()] ?: 0) > serverSetting.get().killsMax) {
+                    kick("请联系管理员")
+                }
+            }
+            if (serverSetting.get().vbanlist.any { wl -> wl == value.PID.toString() }) {
+                kick("VBan")
             }
             field = value
         }
     private var kickRes = ""
-    private var KickCD: Int? = null
     var nextEnterTime = 0L
     var map = ""
     var isChangeMap = false
@@ -77,46 +100,71 @@ class Player(
 
     fun init() {
         loger.info("新玩家 {} 进入服务器 {} ", _p.NAME, serverSetting.get().gameId)
-        if (serverSetting.get().onlyBFEAC) return
-        if (serverSetting.get().botlist.any { wl -> wl == _p.NAME }) return
-        if (config.Config.Config.botlist.any { wl -> wl == _p.NAME }) return
-        if (serverSetting.get().killsMax > 0) {
-            if ((serverSetting.get().killsMap[pid.toString()] ?: 0) > serverSetting.get().killsMax) {
-                kick("请联系管理员")
+        if (serverSetting.get().ilKick){//条形码或进制码
+            if (countIL(_p.NAME) + 1 > 3){
+                loger.info("踢出条形码ID玩家 {}",_p.NAME)
+                kick("Please Change Your ID")
                 return
             }
+            if (isRandomString(_p.NAME)){
+                loger.info("踢出16位长度16进制字符ID玩家 {}",_p.NAME)
+                kick("Please Change Your ID")
+                return
+            }
+
         }
-        if (serverSetting.get().vbanlist.any { wl -> wl == _p.NAME }) {
-            kick("VBan")
+        if (serverSetting.get().onlyBFEAC) return
+        if (serverSetting.get().onlyLRC) {
+            LowRankChecker(this).check()
             return
         }
-        if (nextEnterTime > 0) {
-            if (System.currentTimeMillis() < nextEnterTime) {
-                kick("Wait ${(nextEnterTime - System.currentTimeMillis()) / 1000}sec To Re-enter")
-            } else {
-                nextEnterTime = 0
-            }
-        }
-        if (serverSetting.get().spectatorKick && _p.ROLE == "") {
-            kick("NO WATCHING")
-        }
+        if (serverSetting.get().botlist.any { wl -> wl == _p.NAME }) return
+        if (config.GConfig.Config.botlist.any { wl -> wl == _p.NAME }) return
+
+
         coroutineScope.launch {
             getBaseInfo()
-            kickByTooManyBan()
             kickAlwaysByStats()
             kickAlwaysByClassRank()
+            kickByTooManyBan()
             kickByPlatoons()
             kickByBtr()
         }
     }
-
-    private fun kickByLan() {
-        if (serverSetting.get().maxPing != 0)
-            if ((_p.PATT?.latency ?: "0").toInt() > serverSetting.get().maxPing)
-                kick("Lag ${_p.PATT?.latency}ms")
+    //16位随机ID检测
+    //ebb84eacad9e4d2e => ture
+    //7dd8185cfdc19c2a => ture
+    //7ffa5e068b20fd65 => ture
+    //LittleArray12345 => false
+    fun isRandomString(input: String): Boolean {
+        return input.length == 16 && input.matches("[a-f0-9]+".toRegex())
     }
 
-    private suspend fun getBaseInfo(times: Int = 0) {
+    //条形码检测
+    //EvillIIlIlIl
+    fun countIL(str: String): Int {
+        var count = 0 // 记录连续出现的 "I" 和 "l" 的总次数
+        var index = 0 // 当前遍历的字符索引
+
+        while (index < str.length - 1) { // 注意：遍历索引不能超过倒数第二个字符
+            val currentChar = str[index].toString()
+            val nextChar = str[index + 1].toString()
+            if ((currentChar == "I" || currentChar == "l") && (nextChar == "I" || nextChar == "l")) {
+                count++
+            }else{
+                val spString = str.substring(index + 1)
+                val nextCountIL = countIL(spString)
+                return if (nextCountIL > count) nextCountIL else count
+            }
+
+            index++
+        }
+
+        return count
+    }
+
+
+    suspend fun getBaseInfo(times: Int = 0) {
         baseInfo = ApiCore.getBaseInfo(pid.toString(), "false")
         if (baseInfo == null && times < 5) {
             loger.error("请求玩家 {} 生涯失败,5s后重新查询", _p.NAME)
@@ -137,9 +185,18 @@ class Player(
         }
     }
 
-    private fun kickByBtr(times: Int = 0) {
+    private suspend fun kickByBtr(times: Int = 0) {
         if (times > 5) return
         if (serverSetting.get().recMaxKD > 5.0 && serverSetting.get().recMaxKPM > 5.0 && serverSetting.get().recPlayTime > 30) return
+        if (baseInfo == null) {
+            delay(5000)
+            kickByBtr()
+            return
+        }
+        val lifeTime = baseInfo!!.timePlayed.toDouble() / 60.0 / 60.0
+        val mlkd = (baseInfo!!.kd / serverSetting.get().lifeMaxKD)
+        val mlkp = (baseInfo!!.kpm / serverSetting.get().lifeMaxKPM)
+        if ( (mlkd > 0.8 && lifeTime < 50) || (mlkp > 0.8 && lifeTime < 50) || lifeTime < 200 ) return
         val btrMatches = BtrApi.recentlyServerSearch(_p.NAME, pid.toString(), serverSetting.get().recCount)
         var time = 0.0
         var kills = 0
@@ -148,7 +205,7 @@ class Player(
             //最近3小时
             //loger.info(" {}   {} ",System.currentTimeMillis(),MatchTime.time + 1000 * 60 * 60 * 8 + (3 * 60 * 60 * 1000))
             val ntime = it.stats?.time?.value?.div(60) ?: 0.0
-            val nkills = (it.stats?.kills?.value?.toInt() ?: 0) + (it.stats?.killsAssistAsKills?.value?.toInt() ?:0)
+            val nkills = (it.stats?.kills?.value?.toInt() ?: 0) + (it.stats?.killsAssistAsKills?.value?.toInt() ?: 0)
             val ndeaths = it.stats?.deaths?.value?.toInt() ?: 0
             time += ntime
             kills += nkills
@@ -193,7 +250,7 @@ class Player(
             kick("WinPercent Limited ${serverSetting.get().winPercentLimited * 100}%")
         if (rank > serverSetting.get().rankLimited)
             kick("Rank Limited ${serverSetting.get().rankLimited}")
-        LowRankChecker(info, this, serverSetting).check()
+        LowRankChecker(this).check()
     }
 
     private suspend fun kickAlwaysByClassRank() {
@@ -247,7 +304,7 @@ class Player(
 
                 "駕駛員" -> {
                     val piolt = serverSetting.get().classRankLimited["pilot"]
-                    if (map != "MP_Argonne" && map != "MP_Forest" && map != "MP_Verdun" && map != "MP_Underworld" && map != "MP_Ridge")
+                    if (map != "MP_Argonne" && map != "MP_Forest" && map != "MP_Verdun" && map != "MP_Underworld" && map != "MP_Ridge" && map != "MP_ShovelTown" && map != "MP_Amiens")
                         if (it.classRank > (piolt ?: 51))
                             kick("PilotRank Limited $piolt")
 
@@ -269,11 +326,6 @@ class Player(
 
     fun update(p: PLBy22.ROST) {
         _p = p
-        coroutineScope.launch {
-            if (kickRes.isNotEmpty()) {
-                kick(kickRes, KickCD ?: serverSetting.get().kickCD)
-            }
-        }
         //serverSetting = setting
     }
 
@@ -286,7 +338,8 @@ class Player(
                 val btrMatches = BtrApi.recentlyServerSearch(_p.NAME, pid.toString(), 1.0)
                 btrMatches.firstOrNull()?.let {
                     var kills = serverSetting.get().killsMap[pid.toString()] ?: 0
-                    kills += (it.stats?.kills?.value?.toInt() ?: 0) + (it.stats?.killsAssistAsKills?.value?.toInt() ?:0)
+                    kills += (it.stats?.kills?.value?.toInt() ?: 0) + (it.stats?.killsAssistAsKills?.value?.toInt()
+                        ?: 0)
                     if (kills > 0) serverSetting.get().killsMap[pid.toString()] = kills
                 }
             }
@@ -294,17 +347,23 @@ class Player(
         if (serverSetting.get().reEnterKick)
             nextEnterTime = System.currentTimeMillis() + 60 * 1000
     }
-    fun whitelist():Boolean{
+
+    fun whitelist(): Boolean {
         if (serverSetting.get().whitelist.any { wl -> wl == _p.NAME }) return true
         if (serverSetting.get().adminlist.any { wl -> wl == _p.PID.toString() }) return true
         if (serverSetting.get().botlist.any { wl -> wl == _p.PID.toString() }) return true
-        if (config.Config.Config.botlist.any { wl -> wl == _p.NAME }) return true
+        if (config.GConfig.Config.botlist.any { wl -> wl == _p.NAME }) return true
         return false
     }
-    fun kick(reason: String = "Kick Without Reason", kickCD: Int = serverSetting.get().kickCD, times: Int = 0) {
+
+    fun kick(reason: String = "RULEVIOLATION", kickCD: Int = serverSetting.get().kickCD, times: Int = 0) {
+        //RULEVIOLATION = 违反规则
+        //LATENCY = 高延迟
+        //GENERAL = 默认
+        //OFFENSIVEBEHAVIOR = 攻击行为
         if (whitelist()) return
+        if (sessionId.isEmpty()) return
         kickRes = reason
-        KickCD = kickCD
         val kickPlayer = GatewayApi.kickPlayer(sessionId, serverSetting.get().gameId.toString(), pid.toString(), reason)
         if (kickPlayer.reqBody.contains("Error", true)) {
             loger.error(

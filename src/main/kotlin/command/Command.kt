@@ -1,12 +1,12 @@
 package command
 
-import api.BtrApi
 import api.GHSBotsApi
 import instance.ServerInstance
 import api.GatewayApi
 import instance.Server
 import com.google.gson.Gson
-import config.Config
+import config.GConfig
+import config.SettingConfig
 import data.GatewayServerSearch
 import instance.Player
 import org.slf4j.Logger
@@ -63,6 +63,20 @@ object Command {
                     it.saveServer()
                 }
             }
+            "addop" ->{
+                split.getOrNull(1)?.let {name->//name
+                    split.getOrNull(2)?.let{sid->
+                        split.getOrNull(3)?.let { remid ->
+                            split.getOrNull(4)?.let { ssid ->
+                                GConfig.Config.oplist.add(SettingConfig.Op(name, sid, remid, ssid))
+                                GConfig.saveConfig()
+                                loger.info("添加全局管服号成功")
+                            }
+                        }
+                    }
+                }
+                loger.info("addop name sid remid ssid")
+            }
             "add" -> {
                 val gameID = try {
                     split.getOrNull(1)?.toLong()
@@ -70,12 +84,12 @@ object Command {
                     loger.error("非法参数")
                     return
                 }
-                val sessionID = split.getOrNull(2)
-                if (gameID == null || sessionID == null) {
+                val opName = split.getOrNull(2)
+                if (gameID == null || opName == null) {
                     loger.error("缺少参数")
                     return
                 }
-                if (ServerInstance.addServer(Server.ServerSetting(sessionID = sessionID, gameId = gameID))) {
+                if (ServerInstance.addServer(Server.ServerSetting(opName = opName, gameId = gameID))) {
                     loger.info("添加成功")
                 } else {
                     loger.info("添加失败")
@@ -98,11 +112,6 @@ object Command {
                     loger.info("移除失败")
                 }
             }
-            "list" -> {
-                ServerInstance.INSTANCE.forEach {
-                    loger.info("服务器 {} ", it.serverSetting.gameId)
-                }
-            }
             "ss" -> {
                 val reqBody = GatewayApi.searchServer(
                     split.getOrNull(1) ?: "",
@@ -116,6 +125,7 @@ object Command {
                 ServerInstance.INSTANCE.forEach {
                     it.updateSessionID()
                 }
+                GConfig.updateSessionID()
             }
             "boom" -> {
                 val gameID = try {
@@ -322,7 +332,7 @@ object Command {
             }
             "stop" -> {
                 ServerInstance.save()
-                Config.saveConfig()
+                GConfig.saveConfig()
                 exitProcess(0)
             }
             "bal" ->{
@@ -344,29 +354,7 @@ object Command {
                         rspInfo?.serverInfo?.slots?.Queue?.current,
                         rspInfo?.serverInfo?.slots?.Spectator?.current,
                     )
-                    it.playerList.forEach {
-                        loger.info(
-                            "[ {} ]  {}  LKD: {}  LKP: {}  平均RKD: {}  平均RKP: {}  平均时长: {}  队伍: {}  语言地区: {}   {} ms",
-                            it._p.PATT?.rank,
-                            it._p.NAME,
-                            it.lkd,
-                            it.lkp,
-                            String.format("%.2f",it.rkd),
-                            String.format("%.2f",it.rkp),
-                            String.format("%.2f",it.rtime),
-                            it._p.TEAMNAME,
-                            it._p.LOC.toString(16).chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-                                .toString(Charsets.US_ASCII),
-                            it._p.PATT?.latency
-                        )
-                    }
                 }
-            }
-            "btro" ->{
-                loger.info("btr队列: {} ",BtrApi.taskQueue)
-            }
-            "jso" ->{
-                loger.info("JsonRpc队列: {} ",GatewayApi.taskQueue)
             }
             else -> loger.info("无效命令")
         }

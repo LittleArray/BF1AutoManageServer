@@ -2,7 +2,8 @@ package api
 
 import api.GatewayApi.okHttpClient
 import com.google.gson.Gson
-import config.Config
+import config.GConfig
+import data.EacInfoJson
 import data.PostResponse
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
@@ -44,8 +45,8 @@ object BFEACApi {
             val response = okHttpClient
                 .newBuilder()
                 .apply {
-                    if (Config.sa != null)
-                        proxy(Proxy(Proxy.Type.HTTP, Config.sa))
+                    if (GConfig.sa != null)
+                        proxy(Proxy(Proxy.Type.HTTP, GConfig.sa))
                 }
                 .build()
                 .newCall(request)
@@ -55,11 +56,39 @@ object BFEACApi {
                 PostResponse(isSuccessful = true, reqBody = res)
             } else {
                 val res = response.body.string()
-                loger.error("BFEAC请求不成功,{}", res.replace("\n", "").substring(0, 20))
+                loger.error("BFEAC请求不成功")
                 PostResponse(isSuccessful = false, reqBody = res)
             }
         } catch (ex: Exception) {
-            loger.error("BFEAC请求不成功,{}", ex.stackTraceToString().replace("\n", "").substring(0, 50))
+            loger.error("BFEAC请求不成功 {}",ex.stackTraceToString())
+            PostResponse(isSuccessful = false, error = ex.stackTraceToString())
+        }
+    }
+    private fun getEacApi(url: String): PostResponse {
+        return try {
+            val request = Request.Builder()
+                .url(url)
+                .get()
+                .build()
+            val response = okHttpClient
+                .newBuilder()
+                .apply {
+                    if (GConfig.sa != null)
+                        proxy(Proxy(Proxy.Type.HTTP, GConfig.sa))
+                }
+                .build()
+                .newCall(request)
+                .execute()
+            return if (response.isSuccessful) {
+                val res = response.body.string()
+                PostResponse(isSuccessful = true, reqBody = res)
+            } else {
+                val res = response.body.string()
+                loger.error("BFEAC请求不成功")
+                PostResponse(isSuccessful = false, reqBody = res)
+            }
+        } catch (ex: Exception) {
+            loger.error("BFEAC请求不成功 {}",ex.stackTraceToString())
             PostResponse(isSuccessful = false, error = ex.stackTraceToString())
         }
     }
@@ -73,5 +102,16 @@ object BFEACApi {
         } else {
             MultiCheckResponse(error_code = 404, data = listOf(), error_msg = "")
         }
+    }
+    fun getEacState(id:String): EacInfoJson?{
+        val response = getEacApi("https://api.bfeac.com/case/EAID/$id")
+        if (response.isSuccessful){
+            return try {
+                Gson().fromJson(response.reqBody, EacInfoJson::class.java)
+            }catch (e:Exception){
+                null
+            }
+        }
+        return null
     }
 }

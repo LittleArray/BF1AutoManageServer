@@ -12,7 +12,7 @@ import utils.DataUtils
 import java.net.InetSocketAddress
 import java.net.SocketAddress
 
-object Config {
+object GConfig {
     var Config = SettingConfig()
     var sa: SocketAddress? = null
     var loaderr = false
@@ -55,7 +55,7 @@ object Config {
                     try {
                         it.sessionID = GatewayUtils.getSessionId(it.sid,it.remid)?:it.sessionID
                     } catch (e: Exception) {
-                        TODO("更新sessionID失败")
+                        loger.error("更新sessionID失败 {}",it.name)
                     }
                 }
             }

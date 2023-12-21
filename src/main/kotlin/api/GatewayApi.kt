@@ -1,12 +1,11 @@
 package api
 
 import com.google.gson.Gson
-import config.Config.sa
+import config.GConfig.sa
 import data.FullServerInfoJson
 import data.JsonRpcObj
 import data.PostResponse
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okhttp3.MediaType.Companion.toMediaType
@@ -16,10 +15,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import utils.ChineseTR.toTradition
-import java.net.InetSocketAddress
 import java.net.Proxy
-import java.net.SocketAddress
-import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 

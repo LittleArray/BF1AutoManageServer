@@ -1,7 +1,7 @@
 package api
 
 import com.google.gson.Gson
-import config.Config
+import config.GConfig
 import data.PLBy22
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Request
@@ -9,7 +9,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.net.Proxy
-import java.util.concurrent.TimeUnit
 
 /**
  * @Description
@@ -31,8 +30,8 @@ object PlayerListApi {
             val response = GatewayApi.okHttpClient
                 .newBuilder()
                 .apply {
-                    if (Config.sa != null)
-                        proxy(Proxy(Proxy.Type.HTTP, Config.sa))
+                    if (GConfig.sa != null)
+                        proxy(Proxy(Proxy.Type.HTTP, GConfig.sa))
                 }
                 .build()
                 .newCall(request).execute()
@@ -42,11 +41,11 @@ object PlayerListApi {
                 plBy22.copy(isSuccessful = true)
             } else {
                 val res = response.body.string()
-                loger.error("玩家列表请求不成功,{}",res.replace("\n","").substring(0,36))
+                loger.error("玩家列表请求不成功 {}",res.replace("\n",""))
                 PLBy22(isSuccessful = false)
             }
         } catch (ex: Exception) {
-            loger.error("玩家列表请求出错,{}",ex.stackTraceToString().replace("\n","").substring(0,36))
+            loger.error("玩家列表请求出错 {}",ex.stackTraceToString())
             return PLBy22(isSuccessful = false)
         }
     }
