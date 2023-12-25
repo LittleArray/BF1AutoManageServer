@@ -1,6 +1,7 @@
 package api
 
 import instance.Player
+import instance.Server
 import instance.ServerInstance
 import io.javalin.Javalin
 import io.javalin.http.Context
@@ -23,6 +24,17 @@ object QQBotApi {
         app.start(port)
         app.get("/{gameid}/{method}/{param}") { ctx ->
             listen(ctx)
+        }
+
+        app.get("/lrcLogs"){ctx->
+            val lrclogs = mutableMapOf<String,Server.LRCLog>()
+            ServerInstance.INSTANCE.forEach {s->
+                s.lrcLog?.let {
+                    lrclogs[s.serverSetting.name] = it
+                }
+            }
+            data class LrcLogs(val data:MutableMap<String,Server.LRCLog> = mutableMapOf())
+            ctx.json(LrcLogs(lrclogs))
         }
     }
     data class Param(

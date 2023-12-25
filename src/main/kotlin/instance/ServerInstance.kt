@@ -1,6 +1,7 @@
 package instance
 
 import utils.DataUtils
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * @Description
@@ -8,7 +9,7 @@ import utils.DataUtils
  * @Date 2023/10/21
  */
 object ServerInstance {
-    var INSTANCE = mutableListOf<Server>()
+    var INSTANCE = CopyOnWriteArrayList<Server>()
     fun addServer(serverSetting: Server.ServerSetting): Boolean {
         if (INSTANCE.any{it.serverSetting.gameId == serverSetting.gameId}) {
             return false

@@ -88,6 +88,7 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
     data class LRCLog(
         var id: String,
         var time: Long,
+        var playTime: Long,
         var kick: Boolean,
         var msg:String
     )
@@ -157,7 +158,7 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         @YamlComment("仅使用BFEAC踢挂")
         var onlyBFEAC: Boolean = false,
         @YamlComment("仅使用低等级数据检测")
-        var onlyLRC: Boolean = false,
+        var onlyLRC: Boolean = true,
         @YamlComment(
             "启用低等级严管",
             "游戏时长小与30h的都会触发低等级管理机制",
@@ -168,7 +169,7 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         @YamlComment("自动踢出低等级数据检测")
         var lrcKick:Boolean = false,
         @YamlComment("踢条形码")
-        var ilKick: Boolean = true,
+        var ilKick: Boolean = false,
         @YamlComment("对接接口的Token")
         var token: String = UUID.randomUUID().toString(),
         @YamlComment("服务器GameID")
@@ -314,22 +315,24 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         if (!list.isSuccessful) return
         if (list.GDAT?.firstOrNull()?.GNAM == null) {
             updateGameID()
+            return
         }
-        mapName = list.GDAT?.firstOrNull()?.ATTR?.level ?: ""
-        val admin = (list.GDAT?.firstOrNull()?.ATTR?.admins1 ?: "") +
-                (list.GDAT?.firstOrNull()?.ATTR?.admins2 ?: "") +
-                (list.GDAT?.firstOrNull()?.ATTR?.admins3 ?: "") +
-                (list.GDAT?.firstOrNull()?.ATTR?.admins4 ?: "")
+        serverSetting.name = list.GDAT.firstOrNull()?.GNAM ?:serverSetting.name
+        mapName = list.GDAT.firstOrNull()?.ATTR?.level ?: ""
+        val admin = (list.GDAT.firstOrNull()?.ATTR?.admins1 ?: "") +
+                (list.GDAT.firstOrNull()?.ATTR?.admins2 ?: "") +
+                (list.GDAT.firstOrNull()?.ATTR?.admins3 ?: "") +
+                (list.GDAT.firstOrNull()?.ATTR?.admins4 ?: "")
         serverSetting.adminlist = admin.split(";").toMutableSet()
         var nsoldier = 0
         var nqueue = 0
         var nspectator = 0
         var nbots = 0
         var ncdPlayer = 0
-        progress = list.GDAT?.firstOrNull()?.ATTR?.progress ?: "0"
+        progress = list.GDAT.firstOrNull()?.ATTR?.progress ?: "0"
         val multiCheck = BFEACApi.MultiCheckPostJson()
         //玩家数量
-        list.GDAT?.firstOrNull()?.ROST?.forEach { p ->
+        list.GDAT.firstOrNull()?.ROST?.forEach { p ->
             multiCheck.pids.add(p.PID)
             mapTeamName.forEach { mp, tn ->
                 if (mapName == mp) {

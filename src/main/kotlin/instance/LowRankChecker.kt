@@ -22,7 +22,6 @@ class LowRankChecker(private val player: Player) {
 
     fun check() {
         val info = player.baseInfo!!
-        val winPercent = info.wins.toDouble() / (info.wins + info.losses)
         val time = info.timePlayed.toDouble() / 60.0 / 60.0
         val rank = info.rank
         val id = player._p.NAME
@@ -69,7 +68,14 @@ class LowRankChecker(private val player: Player) {
                                     eacState.data?.firstOrNull()?.case_id
                                 )
                                 if ((eacState.data?.firstOrNull()?.current_status?:0) > 1) return
+                                diff += "请注意BFEAC存在此玩家 ${id} 的案件 https://www.bfeac.com/#/case/${eacState.data?.firstOrNull()?.case_id} &&"
+                                kick = true
                                 player.kick("Ban By LRC Strategy")
+                                ServerInstance.INSTANCE.forEach {
+                                    if (it.serverSetting.gameId == player.serverSetting.get().gameId){
+                                        it.lrcLog = Server.LRCLog(id,System.currentTimeMillis(),time.toLong(),kick,diff)
+                                    }
+                                }
                                 return
                             }
                         }
@@ -82,17 +88,17 @@ class LowRankChecker(private val player: Player) {
                         val wpDetail = "${it.name} Kills:${kills} KPM: ${String.format("%.2f", wkpm)} ACC: ${String.format("%.2f", acc)} HS: ${String.format("%.2f", hs * 100)} 效率: ${String.format("%.2f", vp)} ${task}"
                         if (kills > 60 && wtime > 20) {//武器击杀大于60
                             //////////////////////通用判定//////////////////////
-                            if (it.type != "霰彈槍" && it.type != "配備" && it.type != "近戰武器" && it.type != "手榴彈" && it.type != "戰場裝備") {
-                                if (wkpm > info.kpm * 3.5 && it.name?.contains("1895") != true) {//与生涯KPM差异过大
+                            if (it.type != "霰彈槍" && it.type != "配備" && it.type != "近戰武器" && it.type != "手榴彈" && it.type != "戰場裝備" && it.type != "佩槍") {
+                                if (wkpm > info.kpm * 4 && it.name?.contains("1895") != true) {//与生涯KPM差异过大
                                     diff += "疑似改伤 $wpDetail &&"
                                 }
-                                if (acc > 70 && wkpm > 1) {//准确率大于50%且kpm>1
+                                if (acc > 70 && wkpm > 1.8) {//准确率大于50%且kpm>1
                                     diff += "疑似锁腰子 $wpDetail &&"
                                 }
-                                if (hs > 0.5 && wkpm > 1) {//爆头率>50%且kpm>1
+                                if (hs > 0.6 && wkpm > 1.8 || hs > 0.85) {//爆头率>60%且kpm>1.8或爆头率>85%
                                     diff += "爆头异常 $wpDetail &&"
                                 }
-                                if (hs < 0.01 && wkpm > 2) {
+                                if (hs < 0.01) {
                                     diff += "疑似锁腰子 $wpDetail &&"
                                 }
                             }
@@ -110,14 +116,14 @@ class LowRankChecker(private val player: Player) {
                             }
                             //////////////////////冲锋枪//////////////////////
                             if (it.type == "衝鋒槍") {
-                                if (hs > 0.3) {
+                                if (hs > 0.25 && wkpm > 1.8 || hs > 0.35) {
                                     diff += "冲锋枪爆头异常 $wpDetail &&"
                                     kick = true
                                 }
                             }
                             //////////////////////步槍(狙)//////////////////////
                             if (it.type == "步槍") {
-                                if (vp < 1.2 && wkpm > 1.6 && it.name?.contains("1895（步兵）") == false) {
+                                if (vp < 1.1 && wkpm > 1.8 && it.name?.contains("1895（步兵）") == false) {
                                     diff += "效率异常 $wpDetail &&"
                                     kick = true
                                     continue
@@ -128,7 +134,7 @@ class LowRankChecker(private val player: Player) {
                             EfficiencyMap.hm.forEach { (wpName, k) ->
                                 if (it.name?.contains(wpName) == true) {
                                     val kV = 100.0 / k
-                                    if (vp < kV - 0.2 && wkpm > 1.6) {
+                                    if (vp < kV - 0.2 && wkpm > 1.8) {
                                         diff += "效率异常 $wpDetail &&"
                                     }
                                 }
@@ -139,23 +145,21 @@ class LowRankChecker(private val player: Player) {
 
             }
             ////////////////////总结/////////////////////
-            val diffs = diff.split("&&")
-            var size = 0
+            if (diff.isEmpty()) return
+            val diffs = diff.split("&&").filter { it.isNotEmpty() }
             diffs.forEach {
-                if (it != "") {
-                    loger.warn("[{}] {} PID: {} {}", rank, id, player._p.PID, it)
-                    size++
-                }
+                loger.warn("[{}h] {} PID: {} {}", time.toInt(), id, player._p.PID, it)
             }
-            if (size > 1) kick = true
-            if (kick && serverSetting.get().lrcKick) {
+            if (diffs.size > 1) kick = true
+            if (!serverSetting.get().lrcKick) kick = false
+            if (kick) {
                 loger.info("经过判定踢出玩家 {}", id)
                 player.kick("Low Rank Weapon Anomaly")
             }
-            if (size > 0){
+            if (diffs.isNotEmpty()){
                 ServerInstance.INSTANCE.forEach {
                     if (it.serverSetting.gameId == player.serverSetting.get().gameId){
-                        it.lrcLog = Server.LRCLog(id,System.currentTimeMillis(),kick,diff)
+                        it.lrcLog = Server.LRCLog(id,System.currentTimeMillis(),time.toLong(),kick,diff)
                     }
                 }
             }
