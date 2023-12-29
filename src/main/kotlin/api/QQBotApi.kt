@@ -5,6 +5,9 @@ import instance.Server
 import instance.ServerInstance
 import io.javalin.Javalin
 import io.javalin.http.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import utils.ChineseTR.toTradition
@@ -227,7 +230,8 @@ object QQBotApi {
         loger.info("申请炸服{} 理由:{}", param.gameID, reason)
         val opServer = ServerInstance.getOpServer(param.token, param.gameID)
         if (opServer != null){
-            opServer.playerList.forEach {
+            val list = opServer.playerList
+            list.forEach {
                 it.kick(reason)
             }
             ctx.result( "炸服成功 共踢出${opServer.playerList.size}个玩家")

@@ -9,7 +9,8 @@ import java.util.concurrent.CopyOnWriteArrayList
  * @Date 2023/10/21
  */
 object ServerInstance {
-    var INSTANCE = CopyOnWriteArrayList<Server>()
+    //CopyOnWriteArrayList<Server>()
+    var INSTANCE = mutableListOf<Server>()
     fun addServer(serverSetting: Server.ServerSetting): Boolean {
         if (INSTANCE.any{it.serverSetting.gameId == serverSetting.gameId}) {
             return false

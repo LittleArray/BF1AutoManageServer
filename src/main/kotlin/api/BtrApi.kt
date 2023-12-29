@@ -62,7 +62,7 @@ object BtrApi {
         }
         taskQueue.receive().invoke()
     }
-
+    fun getRec(eaid: String) = build("https://api.tracker.gg/api/v2/bf1/standard/matches/origin/${eaid}")
     fun recentlyServerSearch(eaid: String, pid: String, count: Double,times:Int = 0): MutableSet<BtrMatch.Data.Segment> {
         var data: MutableSet<BtrMatch.Data.Segment> = mutableSetOf()
         val matches = build("https://api.tracker.gg/api/v2/bf1/standard/matches/origin/${eaid}")

@@ -24,8 +24,10 @@ fun main() {
     ServerInstance.load()
     val serversThread = Thread {
         while (true) {
-            ServerInstance.INSTANCE.forEach {
-                it.updatePlayerList()
+            val iterator = ServerInstance.INSTANCE.iterator()
+            while (iterator.hasNext()){
+                val next = iterator.next()
+                next.updatePlayerList()
                 Thread.sleep( 800)
             }
             Thread.sleep( 10*1000)

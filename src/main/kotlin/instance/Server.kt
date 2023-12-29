@@ -82,7 +82,7 @@ class Server(var serverSetting: ServerSetting = ServerSetting()) {
         "MP_Alps" to Pair("大英帝國", "德意志帝國"),
     )
     private val loger: Logger = LoggerFactory.getLogger(this.javaClass)
-    var playerList = CopyOnWriteArrayList<Player>()
+    var playerList = mutableListOf<Player>()
     var oldGameID = 0L
     var lrcLog:LRCLog ?= null
     data class LRCLog(
